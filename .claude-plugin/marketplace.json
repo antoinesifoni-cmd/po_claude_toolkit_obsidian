@@ -1,0 +1,17 @@
+{
+  "name": "po-claude-toolkit",
+  "version": "0.1.0",
+  "description": "Product Owner toolkit for Obsidian + Claude Code: git-like sync between an Obsidian vault and Confluence, with Jira links, PlantUML and user mentions support.",
+  "owner": {
+    "name": "Antoine Sifoni"
+  },
+  "plugins": [
+    {
+      "name": "confluence-sync",
+      "description": "Git-like pull/push/status sync between local Markdown notes and Confluence pages, with version messages, conflict detection, Jira smart links, PlantUML rendering and Confluence user mentions.",
+      "source": "./plugins/confluence-sync",
+      "category": "productivity",
+      "keywords": ["confluence", "obsidian", "sync", "product-owner", "jira", "plantuml"]
+    }
+  ]
+}
