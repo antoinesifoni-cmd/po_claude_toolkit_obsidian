@@ -59,6 +59,23 @@ When pull reports a conflict:
 4. In any other situation, never use `--force` (pull or push) without explicit user
    confirmation — it discards someone's work.
 
+## Frontmatter properties (automatic on link/pull/push)
+
+Every `link`/`pull`/`push` rewrites a block of YAML frontmatter at the top of the note so
+the Confluence linkage is visible in Obsidian's Properties panel, not just in mapping.json:
+`title`, `page_id`, `parent_page_id`, `confluence_space`, `confluence_url`, `up` (a
+`[[wikilink]]` to the parent note, only when that parent is also linked locally),
+`last_modified`, `author`.
+
+- These 8 keys are fully owned by confsync and regenerated every sync — **don't hand-edit
+  them**, edits will be overwritten on the next pull/push. Any other frontmatter property
+  already on the note is left alone.
+- `mapping.json` is still the actual source of truth for the optimistic-lock `version`/
+  `hash` (frontmatter is a display mirror only), so a stray edit to `page_id` in Obsidian
+  can't corrupt sync state — it'll just get corrected on the next sync.
+- `author` resolves the last editor's Confluence account id through `users.json`, same as
+  mentions; if it shows a raw account id, add that person with `users <name> --add`.
+
 ## Content transforms (automatic on push/pull)
 
 See `references/transforms.md` for details. Summary:

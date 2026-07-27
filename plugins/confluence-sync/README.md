@@ -6,6 +6,9 @@ Claude Code. No server: a Python script runs on demand and exits.
 ## Features
 - `link / status / pull / push` with version messages and optimistic locking
   (push aborts if someone edited the page since your last sync)
+- Linked notes get a YAML frontmatter block (page_id, confluence_url, parent link, last
+  modified, author, ...) so the Confluence linkage is visible in Obsidian's Properties
+  panel, not just in `.confsync/mapping.json`
 - Conflict fallback: conflicting pulls write `<file>.remote.md` for manual merge
 - Jira issue keys / `jira-issue` fences -> Confluence smart links
 - `@alias` mentions -> real Confluence mentions (via `.confsync/users.json`)
