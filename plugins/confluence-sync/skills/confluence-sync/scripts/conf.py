@@ -19,7 +19,13 @@ State lives in <vault>/.confsync/:
   mapping.json   { "<relative/path.md>": {"page_id": "...", "version": N, "hash": "sha256..."} }
   users.json     { "alias": {"account_id": "...", "display_name": "..."} }
 
-Dependencies: requests, markdown, markdownify   (pip install -r requirements.txt)
+mapping.json remains the source of truth for the optimistic-lock version/hash. Every
+link/pull/push also mirrors human-readable metadata (page_id, confluence_url, author,
+last_modified, ...) into each note's YAML frontmatter for visibility in Obsidian's
+Properties panel - see CONFSYNC_FM_KEYS. Those keys are regenerated on every sync; don't
+hand-edit them.
+
+Dependencies: requests, markdown, markdownify, pyyaml   (pip install -r requirements.txt)
 Optional: java + plantuml.jar in .confsync/ for PlantUML rendering.
 """
 
@@ -35,10 +41,11 @@ from pathlib import Path
 
 try:
     import requests
+    import yaml
     import markdown as md_lib
     from markdownify import markdownify as html_to_md
 except ImportError as e:
-    sys.exit(f"Missing dependency: {e.name}. Run: pip install requests markdown markdownify")
+    sys.exit(f"Missing dependency: {e.name}. Run: pip install requests markdown markdownify pyyaml")
 
 # ---------------------------------------------------------------- config
 
@@ -149,6 +156,89 @@ def upload_attachment(cfg, s, page_id, filepath: Path):
             r = s.post(url, headers=headers, files=files)
     r.raise_for_status()
     return filepath.name
+
+
+# ---------------------------------------------------------------- frontmatter (Obsidian properties)
+
+# Keys confsync owns end-to-end: rewritten from Confluence metadata on every link/pull/push.
+# Any other frontmatter key already on the note (manual properties) is left untouched.
+CONFSYNC_FM_KEYS = (
+    "title", "page_id", "parent_page_id", "confluence_space",
+    "confluence_url", "up", "last_modified", "author",
+)
+
+FRONTMATTER_RE = re.compile(r"\A---\r?\n(.*?)\r?\n---\r?\n?", re.DOTALL)
+
+
+def split_frontmatter(text: str):
+    """(frontmatter_dict, body) - frontmatter_dict is {} if the file has none."""
+    m = FRONTMATTER_RE.match(text)
+    if not m:
+        return {}, text
+    try:
+        fm = yaml.safe_load(m.group(1)) or {}
+    except yaml.YAMLError:
+        fm = {}
+    return fm, text[m.end():]
+
+
+def render_frontmatter(fm: dict) -> str:
+    if not fm:
+        return ""
+    dumped = yaml.dump(fm, allow_unicode=True, sort_keys=False, default_flow_style=False)
+    return f"---\n{dumped}---\n\n"
+
+
+def read_local_frontmatter(path: Path) -> dict:
+    if not path.exists():
+        return {}
+    fm, _ = split_frontmatter(path.read_text(encoding="utf-8"))
+    return fm
+
+
+def apply_frontmatter(body_md: str, existing_fm: dict, updates: dict) -> str:
+    """Rewrite the confsync-owned keys, keep manual keys, then re-attach the body.
+
+    A key present in CONFSYNC_FM_KEYS but absent from `updates` (e.g. no parent page,
+    so no `up`) is dropped rather than left stale.
+    """
+    manual = {k: v for k, v in existing_fm.items() if k not in CONFSYNC_FM_KEYS}
+    merged = {k: updates[k] for k in CONFSYNC_FM_KEYS if k in updates}
+    merged.update(manual)
+    return render_frontmatter(merged) + body_md.lstrip("\n")
+
+
+def build_confluence_frontmatter(cfg, mapping: dict, meta: dict) -> dict:
+    """Human-readable fields derived from a v2 API page payload (meta/body/put response)."""
+    fields = {"title": meta["title"], "page_id": str(meta["id"])}
+
+    parent_id = meta.get("parentId")
+    if parent_id:
+        fields["parent_page_id"] = str(parent_id)
+        for rel_path, entry in mapping.items():
+            if str(entry.get("page_id")) == str(parent_id):
+                fields["up"] = f"[[{Path(rel_path).stem}]]"
+                break
+
+    webui = (meta.get("_links") or {}).get("webui", "")
+    space_match = re.match(r"/spaces/([^/]+)/pages", webui)
+    if space_match:
+        fields["confluence_space"] = space_match.group(1)
+    if webui:
+        fields["confluence_url"] = cfg["base_url"] + "/wiki" + webui
+
+    version = meta.get("version") or {}
+    created = version.get("createdAt")
+    if created:
+        fields["last_modified"] = created[:10]  # YYYY-MM-DD, renders as a date property
+
+    author_id = version.get("authorId")
+    if author_id:
+        users = load_json(USERS_FILE, {})
+        by_id = {v["account_id"]: k for k, v in users.items()}
+        fields["author"] = by_id.get(author_id, author_id)
+
+    return fields
 
 
 # ---------------------------------------------------------------- transforms md -> storage
@@ -335,6 +425,14 @@ def cmd_link(args):
         "version": 0,  # force first pull/push to be deliberate
         "hash": sha256(local.read_text(encoding="utf-8")) if local.exists() else "",
     }
+
+    if local.exists():
+        existing_fm, body = split_frontmatter(local.read_text(encoding="utf-8"))
+        fields = build_confluence_frontmatter(cfg, mapping, meta)
+        final_text = apply_frontmatter(body, existing_fm, fields)
+        local.write_text(final_text, encoding="utf-8")
+        mapping[f]["hash"] = sha256(final_text)
+
     save_json(MAPPING_FILE, mapping)
     print(f"Linked {f} -> \"{meta['title']}\" (page {args.page_id}, remote v{meta['version']['number']})."
           f"\nRun 'conf.py pull {f}' to fetch it.")
@@ -356,17 +454,21 @@ def cmd_pull(args):
         remote_md = storage_to_md(page["body"]["storage"]["value"])
 
         local_dirty = local.exists() and sha256(local.read_text(encoding="utf-8")) != entry["hash"]
+        fm_fields = build_confluence_frontmatter(cfg, mapping, page)
+        existing_fm = read_local_frontmatter(local)
+
         if local_dirty and remote_v != entry["version"] and not args.force:
             side = local.with_suffix(".remote.md")
-            side.write_text(remote_md, encoding="utf-8")
+            side.write_text(apply_frontmatter(remote_md, existing_fm, fm_fields), encoding="utf-8")
             print(f"{f}: CONFLICT - local edits + remote v{remote_v}."
                   f"\n  Remote saved to {side.name}. Merge manually, then push."
                   f"\n  (or re-run pull --force to overwrite local)")
             continue
 
+        final_text = apply_frontmatter(remote_md, existing_fm, fm_fields)
         local.parent.mkdir(parents=True, exist_ok=True)
-        local.write_text(remote_md, encoding="utf-8")
-        entry.update(version=remote_v, hash=sha256(remote_md), title=page["title"])
+        local.write_text(final_text, encoding="utf-8")
+        entry.update(version=remote_v, hash=sha256(final_text), title=page["title"])
         save_json(MAPPING_FILE, mapping)
         print(f"{f}: pulled v{remote_v} (\"{page['title']}\")")
 
@@ -392,12 +494,17 @@ def cmd_push(args):
             f"\n(--force overrides, clobbering their changes - use with care)"
         )
 
-    md_text = local.read_text(encoding="utf-8")
+    existing_fm, md_text = split_frontmatter(local.read_text(encoding="utf-8"))
     storage = md_to_storage(md_text, cfg, s, entry["page_id"])
     message = args.message or "Updated via confluence-sync"
     result = put_page(cfg, s, entry["page_id"], entry.get("title") or meta["title"],
                       storage, remote_v + 1, message)
-    entry.update(version=result["version"]["number"], hash=sha256(md_text))
+
+    fm_fields = build_confluence_frontmatter(cfg, mapping, result)
+    final_text = apply_frontmatter(md_text, existing_fm, fm_fields)
+    local.write_text(final_text, encoding="utf-8")
+
+    entry.update(version=result["version"]["number"], hash=sha256(final_text))
     save_json(MAPPING_FILE, mapping)
     print(f"{f}: pushed as v{result['version']['number']} - \"{message}\"")
 

@@ -57,6 +57,27 @@ fences (the rendered image is dropped locally — Obsidian's PlantUML plugin re-
 If the company Confluence has a PlantUML macro app installed, a future version can push
 the source into that macro instead — check by typing /plantuml in the Confluence editor.
 
+## Frontmatter (Obsidian properties)
+
+A YAML frontmatter block is maintained at the top of every linked note:
+
+    ---
+    title: PT-1778: RBAC - Charting PPR
+    page_id: "5593530380"
+    parent_page_id: "5534646345"
+    confluence_space: PD
+    confluence_url: https://medfar.atlassian.net/wiki/spaces/PD/pages/5593530380/...
+    up: "[[PT-1778 - RBAC - Product Preliminary Review (PPR)]]"
+    last_modified: "2026-07-15"
+    author: antoine
+    ---
+
+`link`, `pull`, and `push` all rewrite these 8 keys from live Confluence metadata; the
+body content below the block is untouched by this transform. Manual properties (any key
+outside that set) are preserved as-is. `push` strips the frontmatter block before
+converting the body to storage format, so it never gets published onto the Confluence
+page itself.
+
 ## Known lossy cases (round-trip warnings)
 
 - Confluence-native macros (status lozenges, page properties, TOC, children display),
