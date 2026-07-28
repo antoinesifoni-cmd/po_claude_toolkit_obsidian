@@ -6,16 +6,17 @@ Claude Code. No server: a Python script runs on demand and exits.
 ## Features
 - `link / status / pull / push` with version messages and optimistic locking
   (push aborts if someone edited the page since your last sync)
-- Linked notes get a YAML frontmatter block (page_id, confluence_url, parent link, last
-  modified, author, ...) so the Confluence linkage is visible in Obsidian's Properties
-  panel, not just in `.confsync/mapping.json`
+- Linked notes get a YAML frontmatter block (page_id, confluence_version, confluence_url,
+  parent link, last modified, author, ...) so the Confluence linkage is visible in
+  Obsidian's Properties panel, not just in `.confsync/mapping.json`
 - `link-folder` maps a local Obsidian folder to a Confluence folder; `pull --all` then
   renames it to match the Confluence folder's current title (one-way, Confluence wins)
 - Conflict fallback: conflicting pulls write `<file>.remote.md` for manual merge
 - Jira issue keys / `jira-issue` fences -> Confluence smart links
 - `@alias` mentions -> real Confluence mentions (via `.confsync/users.json`)
-- PlantUML fences -> rendered PNG attachments + preserved source (needs local
-  `java` + `plantuml.jar` in `.confsync/`; graceful fallback without)
+- PlantUML/Mermaid fences -> always pushed as a collapsible source section on the page;
+  PlantUML additionally renders a PNG attachment when local `java` + `plantuml.jar` are
+  available in `.confsync/`
 
 ## Setup (once per person)
 1. Create an Atlassian API token: https://id.atlassian.com/manage-profile/security/api-tokens

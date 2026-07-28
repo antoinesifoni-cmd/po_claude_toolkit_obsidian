@@ -33,7 +33,7 @@ Pull: mentions convert back to `@alias` (or `@<accountId>` if not in users.json)
 
 Populate the map with: `conf.py users "name" --add`.
 
-## PlantUML
+## Diagrams: PlantUML and Mermaid
 
 Local syntax:
 
@@ -41,21 +41,29 @@ Local syntax:
     Alice -> Bob: hello
     ```
 
-Push, when `java` is available and `plantuml.jar` is placed in `<vault>/.confsync/`
-(download from https://plantuml.com/download):
-1. Each fence is rendered to PNG (runs locally, no server).
+    ```mermaid
+    graph TD; A-->B;
+    ```
+
+Push, always, regardless of local tooling: the fence's raw source goes into an "expand"
+(collapsible) section on the page, titled `PlantUML source (confsync)` or
+`Mermaid source (confsync)`. Nothing is ever silently dropped.
+
+PlantUML additionally renders a PNG when `java` is available and `plantuml.jar` is
+placed in `<vault>/.confsync/` (download from https://plantuml.com/download):
+1. The fence is rendered to PNG locally (no server call).
 2. PNG uploaded as a page attachment (create-or-update, stable filename per block index).
-3. Page shows the image + an "expand" section titled `PlantUML source (confsync)`
-   containing the source, so nothing is lost and pull can round-trip it.
+3. The image is shown directly above the collapsible source section.
 
-Push without the jar: the fence becomes a code block on the page titled
-"plantuml (not rendered)". Content is preserved either way.
+Mermaid has no local renderer in this plugin, so it's always text-only (no image).
 
-Pull: blocks tagged `PlantUML source (confsync)` are converted back into ```plantuml
-fences (the rendered image is dropped locally — Obsidian's PlantUML plugin re-renders it).
+Pull: a block tagged `PlantUML source (confsync)` or `Mermaid source (confsync)` is
+converted back into an inline ```plantuml / ```mermaid fence — any rendered image above
+it is dropped locally (Obsidian's own PlantUML/Mermaid plugins re-render from the fence).
 
-If the company Confluence has a PlantUML macro app installed, a future version can push
-the source into that macro instead — check by typing /plantuml in the Confluence editor.
+If the company Confluence has a PlantUML or Mermaid macro app installed, a future version
+can push the source into that macro instead — check by typing /plantuml or /mermaid in
+the Confluence editor.
 
 ## Frontmatter (Obsidian properties)
 
@@ -64,6 +72,7 @@ A YAML frontmatter block is maintained at the top of every linked note:
     ---
     title: PT-1778: RBAC - Charting PPR
     page_id: "5593530380"
+    confluence_version: 7
     parent_page_id: "5534646345"
     confluence_space: PD
     confluence_url: https://medfar.atlassian.net/wiki/spaces/PD/pages/5593530380/...
@@ -72,7 +81,7 @@ A YAML frontmatter block is maintained at the top of every linked note:
     author: antoine
     ---
 
-`link`, `pull`, and `push` all rewrite these 8 keys from live Confluence metadata; the
+`link`, `pull`, and `push` all rewrite these 9 keys from live Confluence metadata; the
 body content below the block is untouched by this transform. Manual properties (any key
 outside that set) are preserved as-is. `push` strips the frontmatter block before
 converting the body to storage format, so it never gets published onto the Confluence

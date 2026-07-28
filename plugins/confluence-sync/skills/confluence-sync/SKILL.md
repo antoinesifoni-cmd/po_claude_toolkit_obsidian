@@ -80,11 +80,11 @@ When pull reports a conflict:
 
 Every `link`/`pull`/`push` rewrites a block of YAML frontmatter at the top of the note so
 the Confluence linkage is visible in Obsidian's Properties panel, not just in mapping.json:
-`title`, `page_id`, `parent_page_id`, `confluence_space`, `confluence_url`, `up` (a
-`[[wikilink]]` to the parent note, only when that parent is also linked locally),
-`last_modified`, `author`.
+`title`, `page_id`, `confluence_version` (the page's current Confluence version number),
+`parent_page_id`, `confluence_space`, `confluence_url`, `up` (a `[[wikilink]]` to the
+parent note, only when that parent is also linked locally), `last_modified`, `author`.
 
-- These 8 keys are fully owned by confsync and regenerated every sync — **don't hand-edit
+- These 9 keys are fully owned by confsync and regenerated every sync — **don't hand-edit
   them**, edits will be overwritten on the next pull/push. Any other frontmatter property
   already on the note is left alone.
 - `mapping.json` is still the actual source of truth for the optimistic-lock `version`/
@@ -99,9 +99,12 @@ See `references/transforms.md` for details. Summary:
 - Jira: ```jira-issue fences and bare keys (RD-123) ↔ Jira links (render as smart links).
 - Mentions: `@alias` / `@[Full Name]` ↔ real Confluence mentions via users.json.
   Push warns on unknown aliases; offer to run `users <name> --add`.
-- PlantUML: ```plantuml fences → rendered PNG attachment + collapsed source on the page
-  (requires java + `plantuml.jar` in `.confsync/`); falls back to a code block if absent.
-  On pull, confsync-tagged diagrams come back as ```plantuml fences.
+- Diagrams: ```plantuml / ```mermaid fences → always pushed as a collapsible section
+  containing the raw source (title `"<Lang> source (confsync)"`). PlantUML additionally
+  renders a PNG shown above the section when java + `plantuml.jar` are available in
+  `.confsync/`; Mermaid has no local renderer, so it's always text-only. On pull, either
+  comes back as an inline ```plantuml / ```mermaid fence (a plain fence is what "a
+  section in the text" means once it's markdown — the image, if any, is dropped locally).
 
 ## Safety rules
 
