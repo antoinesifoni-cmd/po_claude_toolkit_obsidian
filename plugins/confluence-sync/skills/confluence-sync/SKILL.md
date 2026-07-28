@@ -45,6 +45,23 @@ inside the vault.
   one summarizing the diff and confirm it.
 - `users <query> [--add]` — search Confluence users; `--add` stores them in users.json
   as `@firstname` aliases for mentions.
+- `link-folder <folder> <folderId>` — map a local Obsidian folder to an existing
+  Confluence *folder* (the organizational container, not a page - no body content).
+  Folder id is the number in `.../wiki/spaces/<space>/folder/<folderId>`.
+
+## Folder name sync (one-way, Confluence wins)
+
+Confluence folders have no body to conflict on, so this is simpler than page sync: on
+every `pull --all`, each linked folder's local directory is renamed to match the
+Confluence folder's *current* title if it has drifted. Local renames are never pushed
+back - Confluence is the source of truth for folder names, matching this vault's
+"Confluence as company source of truth" setup.
+- Runs only as part of `pull --all`, not a single-file `pull` (renaming a directory is
+  more disruptive than editing a note, so it only happens on the deliberate full-sync).
+- A rename cascades: every mapping.json/folders.json entry nested under the renamed
+  folder gets its path rewritten too, so linked pages inside it don't go stale.
+- If the target name already exists locally, the rename is skipped with a warning
+  instead of overwriting - resolve by hand, then re-run `pull --all`.
 
 ## Conflict handling
 

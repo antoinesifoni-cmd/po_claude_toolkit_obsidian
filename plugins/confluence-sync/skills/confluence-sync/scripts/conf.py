@@ -3,11 +3,12 @@
 conf.py - Git-like sync between local Markdown files and Confluence Cloud.
 
 Commands:
-  status  [file]              Compare local files vs remote versions
-  pull    <file|--all>        Download remote page(s) -> markdown (conflict-safe)
-  push    <file> -m "msg"     Upload local markdown -> Confluence (optimistic lock)
-  link    <file> <pageId>     Map a local file to an existing Confluence page
-  users   <query>             Search Confluence users (to populate users.json)
+  status       [file]              Compare local files vs remote versions
+  pull         <file|--all>        Download remote page(s) -> markdown (conflict-safe)
+  push         <file> -m "msg"     Upload local markdown -> Confluence (optimistic lock)
+  link         <file> <pageId>     Map a local file to an existing Confluence page
+  link-folder  <folder> <folderId> Map a local folder to an existing Confluence folder
+  users        <query>             Search Confluence users (to populate users.json)
 
 Auth (env vars):
   CONFLUENCE_BASE_URL   e.g. https://medfar.atlassian.net
@@ -17,6 +18,7 @@ Auth (env vars):
 State lives in <vault>/.confsync/:
   config.json    { "base_url": "...", "jira_project_keys": ["RD","MYLE",...] }
   mapping.json   { "<relative/path.md>": {"page_id": "...", "version": N, "hash": "sha256..."} }
+  folders.json   { "<relative/folder/path>": {"folder_id": "...", "title": "...", "parent_id": "..."} }
   users.json     { "alias": {"account_id": "...", "display_name": "..."} }
 
 mapping.json remains the source of truth for the optimistic-lock version/hash. Every
@@ -24,6 +26,11 @@ link/pull/push also mirrors human-readable metadata (page_id, confluence_url, au
 last_modified, ...) into each note's YAML frontmatter for visibility in Obsidian's
 Properties panel - see CONFSYNC_FM_KEYS. Those keys are regenerated on every sync; don't
 hand-edit them.
+
+Confluence "folders" (organizational containers, no page body) can be tracked with
+link-folder. `pull --all` then renames the local folder to match the current Confluence
+folder title, one-way (Confluence wins), cascading the rename into mapping.json/
+folders.json paths nested under it.
 
 Dependencies: requests, markdown, markdownify, pyyaml   (pip install -r requirements.txt)
 Optional: java + plantuml.jar in .confsync/ for PlantUML rendering.
@@ -61,6 +68,7 @@ def find_vault_root(start: Path) -> Path:
 VAULT = find_vault_root(Path.cwd())
 STATE_DIR = VAULT / ".confsync"
 MAPPING_FILE = STATE_DIR / "mapping.json"
+FOLDERS_FILE = STATE_DIR / "folders.json"
 CONFIG_FILE = STATE_DIR / "config.json"
 USERS_FILE = STATE_DIR / "users.json"
 PLANTUML_JAR = STATE_DIR / "plantuml.jar"
@@ -114,6 +122,13 @@ def rel(path: Path) -> str:
 def get_page_meta(cfg, s, page_id):
     """Metadata only - v2 API returns version without body unless body-format is asked."""
     r = s.get(f"{cfg['base_url']}/wiki/api/v2/pages/{page_id}")
+    r.raise_for_status()
+    return r.json()
+
+
+def get_folder_meta(cfg, s, folder_id):
+    """Folders are organizational containers - id/title/parentId only, no body."""
+    r = s.get(f"{cfg['base_url']}/wiki/api/v2/folders/{folder_id}")
     r.raise_for_status()
     return r.json()
 
@@ -438,9 +453,81 @@ def cmd_link(args):
           f"\nRun 'conf.py pull {f}' to fetch it.")
 
 
+def cmd_link_folder(args):
+    cfg = get_config()
+    s = api(cfg)
+    meta = get_folder_meta(cfg, s, args.folder_id)
+    local = Path(args.folder)
+    if not local.is_dir():
+        sys.exit(f"{local} is not an existing local folder (create it first, then link it)")
+    folders = load_json(FOLDERS_FILE, {})
+    f = rel(local)
+    folders[f] = {
+        "folder_id": args.folder_id,
+        "title": meta["title"],
+        "parent_id": meta.get("parentId"),
+    }
+    save_json(FOLDERS_FILE, folders)
+    print(f"Linked folder {f} -> \"{meta['title']}\" (folder {args.folder_id})."
+          f"\nRun 'conf.py pull --all' to keep its name in sync with Confluence.")
+
+
+def sync_folders(cfg, s):
+    """One-way: rename local folders to match their current Confluence folder title.
+
+    Confluence wins (no folder body to conflict on). A rename cascades into every
+    mapping.json/folders.json path nested under the renamed folder. Re-reads folders.json
+    each iteration since an earlier rename in this same pass may have already moved a
+    later entry's path.
+    """
+    initial = load_json(FOLDERS_FILE, {})
+    if not initial:
+        return
+    ordered_ids = [e["folder_id"] for _, e in sorted(initial.items(), key=lambda kv: kv[0].count("/"))]
+    for folder_id in ordered_ids:
+        folders = load_json(FOLDERS_FILE, {})
+        f = next((k for k, e in folders.items() if e["folder_id"] == folder_id), None)
+        if f is None:
+            continue  # already renamed away as part of an ancestor's cascade below
+        local = VAULT / f
+        if not local.is_dir():
+            print(f"folder {f}: local path missing, skipping")
+            continue
+
+        remote_title = get_folder_meta(cfg, s, folder_id)["title"]
+        if local.name == remote_title:
+            continue
+
+        new_local = local.parent / remote_title
+        if new_local.exists():
+            print(f"folder {f}: Confluence renamed it to \"{remote_title}\" but "
+                  f"{new_local} already exists locally - skipping, resolve by hand")
+            continue
+
+        local.rename(new_local)
+        new_f = rel(new_local)
+        old_prefix, new_prefix = f + "/", new_f + "/"
+
+        mapping = load_json(MAPPING_FILE, {})
+        for path_key in list(mapping.keys()):
+            if path_key.startswith(old_prefix):
+                mapping[new_prefix + path_key[len(old_prefix):]] = mapping.pop(path_key)
+        save_json(MAPPING_FILE, mapping)
+
+        for other_key in list(folders.keys()):
+            if other_key != f and other_key.startswith(old_prefix):
+                folders[new_prefix + other_key[len(old_prefix):]] = folders.pop(other_key)
+        folders[new_f] = folders.pop(f)
+        folders[new_f]["title"] = remote_title
+        save_json(FOLDERS_FILE, folders)
+        print(f"folder: renamed \"{f}\" -> \"{new_f}\" (Confluence title changed)")
+
+
 def cmd_pull(args):
     cfg = get_config()
     s = api(cfg)
+    if args.all:
+        sync_folders(cfg, s)
     mapping = load_json(MAPPING_FILE, {})
     targets = sorted(mapping.keys()) if args.all else [rel(Path(args.file))]
     for f in targets:
@@ -540,6 +627,9 @@ def main():
 
     sp = sub.add_parser("link"); sp.add_argument("file"); sp.add_argument("page_id")
     sp.set_defaults(fn=cmd_link)
+
+    sp = sub.add_parser("link-folder"); sp.add_argument("folder"); sp.add_argument("folder_id")
+    sp.set_defaults(fn=cmd_link_folder)
 
     sp = sub.add_parser("pull"); sp.add_argument("file", nargs="?")
     sp.add_argument("--all", action="store_true"); sp.add_argument("--force", action="store_true")
