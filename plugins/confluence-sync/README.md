@@ -9,6 +9,8 @@ Claude Code. No server: a Python script runs on demand and exits.
 - Linked notes get a YAML frontmatter block (page_id, confluence_url, parent link, last
   modified, author, ...) so the Confluence linkage is visible in Obsidian's Properties
   panel, not just in `.confsync/mapping.json`
+- `link-folder` maps a local Obsidian folder to a Confluence folder; `pull --all` then
+  renames it to match the Confluence folder's current title (one-way, Confluence wins)
 - Conflict fallback: conflicting pulls write `<file>.remote.md` for manual merge
 - Jira issue keys / `jira-issue` fences -> Confluence smart links
 - `@alias` mentions -> real Confluence mentions (via `.confsync/users.json`)
@@ -34,6 +36,8 @@ Claude Code. No server: a Python script runs on demand and exits.
 - "link roadmap.md to page 5600870477"
 - "pull the role model pages" / "what's the sync status?"
 - "push decision-matrix.md with message 'added PT-1815 column'"
+- "link folder 'Charting PPR' to Confluence folder 5641404462" (then rename-syncs on
+  every `pull --all`)
 
 Claude runs `scripts/conf.py` for you and helps merge on conflicts.
 
