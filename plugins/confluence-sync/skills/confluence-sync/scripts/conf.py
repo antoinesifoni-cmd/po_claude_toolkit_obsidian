@@ -22,15 +22,20 @@ State lives in <vault>/.confsync/:
   users.json     { "alias": {"account_id": "...", "display_name": "..."} }
 
 mapping.json remains the source of truth for the optimistic-lock version/hash. Every
-link/pull/push also mirrors human-readable metadata (page_id, confluence_url, author,
-last_modified, ...) into each note's YAML frontmatter for visibility in Obsidian's
-Properties panel - see CONFSYNC_FM_KEYS. Those keys are regenerated on every sync; don't
-hand-edit them.
+link/pull/push also mirrors human-readable metadata (page_id, confluence_version,
+confluence_url, author, last_modified, ...) into each note's YAML frontmatter for
+visibility in Obsidian's Properties panel - see CONFSYNC_FM_KEYS. Those keys are
+regenerated on every sync; don't hand-edit them.
 
 Confluence "folders" (organizational containers, no page body) can be tracked with
 link-folder. `pull --all` then renames the local folder to match the current Confluence
 folder title, one-way (Confluence wins), cascading the rename into mapping.json/
 folders.json paths nested under it.
+
+```plantuml / ```mermaid fences always push their raw source into a Confluence
+collapsible "expand" section (see DIAGRAM_TITLES). PlantUML also renders a PNG (shown
+above the section) when java + plantuml.jar are present in .confsync/; Mermaid has no
+local renderer, so it's always text-only. Pull converts either back into an inline fence.
 
 Dependencies: requests, markdown, markdownify, pyyaml   (pip install -r requirements.txt)
 Optional: java + plantuml.jar in .confsync/ for PlantUML rendering.
@@ -178,7 +183,7 @@ def upload_attachment(cfg, s, page_id, filepath: Path):
 # Keys confsync owns end-to-end: rewritten from Confluence metadata on every link/pull/push.
 # Any other frontmatter key already on the note (manual properties) is left untouched.
 CONFSYNC_FM_KEYS = (
-    "title", "page_id", "parent_page_id", "confluence_space",
+    "title", "page_id", "confluence_version", "parent_page_id", "confluence_space",
     "confluence_url", "up", "last_modified", "author",
 )
 
@@ -227,6 +232,10 @@ def build_confluence_frontmatter(cfg, mapping: dict, meta: dict) -> dict:
     """Human-readable fields derived from a v2 API page payload (meta/body/put response)."""
     fields = {"title": meta["title"], "page_id": str(meta["id"])}
 
+    version = meta.get("version") or {}
+    if version.get("number") is not None:
+        fields["confluence_version"] = version["number"]
+
     parent_id = meta.get("parentId")
     if parent_id:
         fields["parent_page_id"] = str(parent_id)
@@ -242,7 +251,6 @@ def build_confluence_frontmatter(cfg, mapping: dict, meta: dict) -> dict:
     if webui:
         fields["confluence_url"] = cfg["base_url"] + "/wiki" + webui
 
-    version = meta.get("version") or {}
     created = version.get("createdAt")
     if created:
         fields["last_modified"] = created[:10]  # YYYY-MM-DD, renders as a date property
@@ -259,8 +267,17 @@ def build_confluence_frontmatter(cfg, mapping: dict, meta: dict) -> dict:
 # ---------------------------------------------------------------- transforms md -> storage
 
 JIRA_FENCE_RE = re.compile(r"```jira-issue\n(.*?)```", re.DOTALL)
-PLANTUML_FENCE_RE = re.compile(r"```plantuml\n(.*?)```", re.DOTALL)
+DIAGRAM_FENCE_RE = re.compile(r"```(plantuml|mermaid)\n(.*?)```", re.DOTALL)
 MENTION_RE = re.compile(r"@\[([^\]]+)\]|@([A-Za-z0-9_.-]+)")
+
+# Collapsible "expand" section title per diagram language - source always goes here,
+# regardless of whether an image could also be rendered (PlantUML titles matches the
+# earlier confsync convention so pages already pushed still round-trip on pull).
+DIAGRAM_TITLES = {
+    "plantuml": "PlantUML source (confsync)",
+    "mermaid": "Mermaid source (confsync)",
+}
+DIAGRAM_LANG_BY_TITLE = {title: lang for lang, title in DIAGRAM_TITLES.items()}
 
 
 def transform_jira(md_text: str, cfg) -> str:
@@ -282,56 +299,57 @@ def transform_jira(md_text: str, cfg) -> str:
     return md_text
 
 
-def render_plantuml_blocks(md_text: str, cfg, s, page_id):
-    """Render ```plantuml fences to PNG, upload as attachments, replace with placeholders.
+def render_diagram_blocks(md_text: str, cfg, s, page_id):
+    """Extract ```plantuml/```mermaid fences, replace with placeholder tokens.
 
-    Returns (md_text, attachments_map) where placeholders CONFSYNC-PUML-i are later
-    swapped for <ac:image> + collapsed source in the storage HTML.
+    PlantUML also renders a PNG (uploaded as an attachment) when java + plantuml.jar are
+    available locally; Mermaid has no local renderer, so it's always text-only. Either
+    way the raw source always goes into the returned block info - it always ends up in a
+    collapsible section in storage HTML (see inject_diagram_storage), image or not.
+
+    Returns (md_text, blocks) where blocks maps token -> {lang, source, image_filename}.
     """
-    blocks = PLANTUML_FENCE_RE.findall(md_text)
-    if not blocks:
+    found = DIAGRAM_FENCE_RE.findall(md_text)
+    if not found:
         return md_text, {}
 
-    have_renderer = PLANTUML_JAR.exists()
-    attachments = {}
-    for i, src in enumerate(blocks):
-        token = f"CONFSYNCPUML{i}"
-        if have_renderer:
+    have_plantuml_renderer = PLANTUML_JAR.exists()
+    blocks = {}
+    for i, (lang, raw_src) in enumerate(found):
+        token = f"CONFSYNCDIAGRAM{i}"
+        src = raw_src.strip()
+        image_filename = None
+        if lang == "plantuml" and have_plantuml_renderer:
             with tempfile.TemporaryDirectory() as tmp:
                 puml = Path(tmp) / f"diagram_{page_id}_{i}.puml"
-                puml.write_text(f"@startuml\n{src.strip()}\n@enduml\n"
-                                if "@startuml" not in src else src, encoding="utf-8")
+                puml.write_text(src if "@startuml" in src else f"@startuml\n{src}\n@enduml\n",
+                                encoding="utf-8")
                 subprocess.run(
                     ["java", "-jar", str(PLANTUML_JAR), "-tpng", str(puml)],
                     check=True, capture_output=True,
                 )
-                png = puml.with_suffix(".png")
-                name = upload_attachment(cfg, s, page_id, png)
-                attachments[token] = {"filename": name, "source": src.strip()}
+                image_filename = upload_attachment(cfg, s, page_id, puml.with_suffix(".png"))
+        blocks[token] = {"lang": lang, "source": src, "image_filename": image_filename}
+        md_text = md_text.replace(f"```{lang}\n{raw_src}```", f"\n{token}\n", 1)
+    return md_text, blocks
+
+
+def inject_diagram_storage(html: str, blocks) -> str:
+    for token, info in blocks.items():
+        expand = (
+            f'<ac:structured-macro ac:name="expand">'
+            f'<ac:parameter ac:name="title">{DIAGRAM_TITLES[info["lang"]]}</ac:parameter>'
+            f'<ac:rich-text-body><ac:structured-macro ac:name="code">'
+            f'<ac:plain-text-body><![CDATA[{info["source"]}]]></ac:plain-text-body>'
+            f"</ac:structured-macro></ac:rich-text-body></ac:structured-macro>"
+        )
+        if info["image_filename"]:
+            block = (
+                f'<ac:image><ri:attachment ri:filename="{info["image_filename"]}"/></ac:image>'
+                + expand
+            )
         else:
-            attachments[token] = {"filename": None, "source": src.strip()}
-        md_text = md_text.replace(f"```plantuml\n{src}```", f"\n{token}\n", 1)
-    return md_text, attachments
-
-
-def inject_plantuml_storage(html: str, attachments) -> str:
-    for token, info in attachments.items():
-        if info["filename"]:
-            block = (
-                f'<ac:image><ri:attachment ri:filename="{info["filename"]}"/></ac:image>'
-                f'<ac:structured-macro ac:name="expand">'
-                f'<ac:parameter ac:name="title">PlantUML source (confsync)</ac:parameter>'
-                f'<ac:rich-text-body><ac:structured-macro ac:name="code">'
-                f'<ac:plain-text-body><![CDATA[{info["source"]}]]></ac:plain-text-body>'
-                f"</ac:structured-macro></ac:rich-text-body></ac:structured-macro>"
-            )
-        else:  # no renderer available: keep source visible as a code block
-            block = (
-                f'<ac:structured-macro ac:name="code">'
-                f'<ac:parameter ac:name="title">plantuml (not rendered - plantuml.jar missing)</ac:parameter>'
-                f'<ac:plain-text-body><![CDATA[{info["source"]}]]></ac:plain-text-body>'
-                f"</ac:structured-macro>"
-            )
+            block = expand
         html = re.sub(rf"<p>\s*{token}\s*</p>|{token}", block, html, count=1)
     return html
 
@@ -360,9 +378,9 @@ def transform_mentions(html: str) -> str:
 
 def md_to_storage(md_text: str, cfg, s, page_id) -> str:
     md_text = transform_jira(md_text, cfg)
-    md_text, puml = render_plantuml_blocks(md_text, cfg, s, page_id)
+    md_text, diagrams = render_diagram_blocks(md_text, cfg, s, page_id)
     html = md_lib.markdown(md_text, extensions=["tables", "fenced_code", "sane_lists"])
-    html = inject_plantuml_storage(html, puml)
+    html = inject_diagram_storage(html, diagrams)
     html = transform_mentions(html)
     return html
 
@@ -382,14 +400,19 @@ def storage_to_md(html: str) -> str:
         r'<ac:link><ri:user ri:account-id="([^"]+)"\s*/></ac:link>', mention_back, html
     )
 
-    # confsync plantuml expand blocks -> fences (drop the rendered image)
-    def puml_back(m):
-        return f"\n```plantuml\n{m.group(1).strip()}\n```\n"
+    # confsync diagram expand blocks -> fences (drop the rendered image, if any - keeping
+    # the source is the point; a plain fence is simply "a section in the text" once it's
+    # markdown, there's no "collapsed" state outside Confluence)
+    def diagram_back(m):
+        lang = DIAGRAM_LANG_BY_TITLE[m.group(1)]
+        return f"\n```{lang}\n{m.group(2).strip()}\n```\n"
 
+    title_alt = "|".join(re.escape(t) for t in DIAGRAM_TITLES.values())
     html = re.sub(
-        r'<ac:image>.*?</ac:image>\s*<ac:structured-macro ac:name="expand">.*?'
-        r"PlantUML source \(confsync\).*?<!\[CDATA\[(.*?)\]\]>.*?</ac:structured-macro>",
-        puml_back, html, flags=re.DOTALL,
+        r'(?:<ac:image>.*?</ac:image>\s*)?<ac:structured-macro ac:name="expand">.*?'
+        rf'<ac:parameter ac:name="title">({title_alt})</ac:parameter>.*?'
+        r"<!\[CDATA\[(.*?)\]\]>.*?</ac:structured-macro>",
+        diagram_back, html, flags=re.DOTALL,
     )
 
     text = html_to_md(html, heading_style="ATX", bullets="-")
