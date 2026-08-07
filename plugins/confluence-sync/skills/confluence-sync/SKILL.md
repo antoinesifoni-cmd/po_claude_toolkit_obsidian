@@ -48,6 +48,35 @@ inside the vault.
 - `link-folder <folder> <folderId>` — map a local Obsidian folder to an existing
   Confluence *folder* (the organizational container, not a page - no body content).
   Folder id is the number in `.../wiki/spaces/<space>/folder/<folderId>`.
+- `rebaseline [--check]` — one-time migration of `mapping.json` entries written by
+  v0.3.0 or earlier to body-only hashing (see below). `--check` reports without writing.
+  Touches only `mapping.json`: never contacts Confluence, never modifies a note.
+
+## Change detection: the hash covers the body, not the frontmatter
+
+`mapping.json` stores a hash of each note so `status` and `pull` can tell whether you
+have local edits. Since v0.4.0 that hash covers the **markdown body only** and ignores
+YAML frontmatter entirely (entries are tagged `"hash_algo": "body1"`).
+
+Why: `push` strips frontmatter before uploading, so frontmatter can never be
+push-relevant. Hashing it meant Obsidian's Properties panel reformatting the YAML
+(it writes block sequences at 2-space indent and double quotes, PyYAML writes them at
+zero indent with single quotes, so the two never agree) flipped every synced note to
+"local changes (push needed)" within seconds of being pulled.
+
+That mattered beyond noise: a permanently-dirty flag also poisoned the pull conflict
+check, which fires on `local_dirty AND remote moved`. Clean pulls became spurious
+CONFLICTs demanding a manual merge, and genuine local edits became indistinguishable
+from formatter noise.
+
+Consequences to know:
+- A change to a **manual** frontmatter property (e.g. your own `status: draft`) no
+  longer shows as "push needed". That is correct, since push would not upload it and
+  pull preserves it, so nothing can be lost.
+- `status` flags any entry still on the old whole-file hash and points at `rebaseline`.
+  Migration is deliberately manual, not silent: a note could hold a genuine un-pushed
+  edit made before the upgrade, and a silent re-baseline would bury it. Review the
+  flagged files first, then run `rebaseline`.
 
 ## Folder name sync (one-way, Confluence wins)
 
@@ -89,7 +118,8 @@ parent note, only when that parent is also linked locally), `last_modified`, `au
   already on the note is left alone.
 - `mapping.json` is still the actual source of truth for the optimistic-lock `version`/
   `hash` (frontmatter is a display mirror only), so a stray edit to `page_id` in Obsidian
-  can't corrupt sync state — it'll just get corrected on the next sync.
+  can't corrupt sync state — it'll just get corrected on the next sync. Frontmatter is
+  also excluded from the change hash, so reformatting it never reads as a local edit.
 - `author` resolves the last editor's Confluence account id through `users.json`, same as
   mentions; if it shows a raw account id, add that person with `users <name> --add`.
 
