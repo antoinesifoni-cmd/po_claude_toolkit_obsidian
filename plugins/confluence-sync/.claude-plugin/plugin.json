@@ -1,6 +1,6 @@
 {
   "name": "confluence-sync",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Git-like pull/push/status sync between local Markdown notes (Obsidian vault) and Confluence Cloud pages. Supports version messages, optimistic-locking conflict detection, Jira smart links, PlantUML and Mermaid diagrams, Confluence user mentions, note frontmatter mirroring (including live page version) and folder name sync.",
   "author": {
     "name": "Antoine Sifoni"

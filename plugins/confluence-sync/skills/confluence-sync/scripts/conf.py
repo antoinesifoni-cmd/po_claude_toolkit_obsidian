@@ -8,6 +8,7 @@ Commands:
   push         <file> -m "msg"     Upload local markdown -> Confluence (optimistic lock)
   link         <file> <pageId>     Map a local file to an existing Confluence page
   link-folder  <folder> <folderId> Map a local folder to an existing Confluence folder
+  rebaseline   [--check]           Migrate pre-0.4.0 whole-file hashes to body-only
   users        <query>             Search Confluence users (to populate users.json)
 
 Auth (env vars):
@@ -26,6 +27,12 @@ link/pull/push also mirrors human-readable metadata (page_id, confluence_version
 confluence_url, author, last_modified, ...) into each note's YAML frontmatter for
 visibility in Obsidian's Properties panel - see CONFSYNC_FM_KEYS. Those keys are
 regenerated on every sync; don't hand-edit them.
+
+Since 0.4.0 the stored hash covers the markdown body only, never the frontmatter
+(entries carry "hash_algo": "body1"). Push strips frontmatter before upload anyway, so
+frontmatter can't be push-relevant, and hashing it made Obsidian's YAML reformatting
+look like a local edit on every note. See body_hash(). Entries written by <=0.3.0 are
+flagged by `status` and migrated by `rebaseline`.
 
 Confluence "folders" (organizational containers, no page body) can be tracked with
 link-folder. `pull --all` then renames the local folder to match the current Confluence
@@ -116,6 +123,38 @@ def api(cfg):
 
 def sha256(text: str) -> str:
     return "sha256:" + hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+# Marks a mapping entry whose `hash` covers the body only. Entries without it were
+# written by <=0.3.0 (whole-file hash) and need `conf.py rebaseline` once.
+HASH_ALGO = "body1"
+
+
+def body_hash(text: str) -> str:
+    """Hash the markdown body, ignoring YAML frontmatter.
+
+    Push strips frontmatter before upload (see cmd_push), so frontmatter is by
+    definition not push-relevant. Hashing it made every note read "local changes"
+    the moment Obsidian's Properties panel reformatted the YAML (it writes block
+    sequences at 2-space indent and double quotes, PyYAML writes them at zero
+    indent with single quotes, so the two never agree). That stuck-dirty flag also
+    poisoned the pull conflict check, turning clean pulls into spurious CONFLICTs.
+
+    Callers reaching this via read_text() already get universal-newline translation
+    (CRLF -> LF), but the normalization is repeated here so the function is correct
+    for any caller, including one passing raw bytes decoded elsewhere.
+    """
+    body = split_frontmatter(text)[1]
+    return sha256(body.replace("\r\n", "\n").replace("\r", "\n").strip())
+
+
+def local_body_hash(path: Path) -> str:
+    return body_hash(path.read_text(encoding="utf-8"))
+
+
+def is_legacy(entry: dict) -> bool:
+    """True for entries still carrying a whole-file hash from <=0.3.0."""
+    return entry.get("hash_algo") != HASH_ALGO
 
 
 def rel(path: Path) -> str:
@@ -429,15 +468,14 @@ def cmd_status(args):
     if not targets:
         print("No files linked yet. Use: conf.py link <file> <pageId>")
         return
+    legacy_seen = False
     for f in targets:
         entry = mapping.get(f)
         if not entry:
             print(f"{f}: not linked")
             continue
         local = VAULT / f
-        local_changed = (
-            not local.exists() or sha256(local.read_text(encoding="utf-8")) != entry["hash"]
-        )
+        local_changed = not local.exists() or local_body_hash(local) != entry["hash"]
         meta = get_page_meta(cfg, s, entry["page_id"])
         remote_v = meta["version"]["number"]
         remote_changed = remote_v != entry["version"]
@@ -447,7 +485,15 @@ def cmd_status(args):
             (False, True): f"remote moved to v{remote_v} (pull needed)",
             (True, True): f"CONFLICT: local changes AND remote moved to v{remote_v}",
         }[(local_changed, remote_changed)]
+        if is_legacy(entry):
+            state += "  [legacy whole-file hash, run 'conf.py rebaseline']"
+            legacy_seen = True
         print(f"{f}: v{entry['version']} local | v{remote_v} remote -> {state}")
+
+    if legacy_seen:
+        print("\nSome entries still use the pre-0.4.0 whole-file hash, which counted"
+              "\nfrontmatter reformatting as a local change. Review any 'push needed'"
+              "\nabove, then run 'conf.py rebaseline' to switch them to body-only.")
 
 
 def cmd_link(args):
@@ -461,7 +507,8 @@ def cmd_link(args):
         "page_id": args.page_id,
         "title": meta["title"],
         "version": 0,  # force first pull/push to be deliberate
-        "hash": sha256(local.read_text(encoding="utf-8")) if local.exists() else "",
+        "hash": local_body_hash(local) if local.exists() else "",
+        "hash_algo": HASH_ALGO,
     }
 
     if local.exists():
@@ -469,7 +516,7 @@ def cmd_link(args):
         fields = build_confluence_frontmatter(cfg, mapping, meta)
         final_text = apply_frontmatter(body, existing_fm, fields)
         local.write_text(final_text, encoding="utf-8")
-        mapping[f]["hash"] = sha256(final_text)
+        mapping[f]["hash"] = body_hash(final_text)
 
     save_json(MAPPING_FILE, mapping)
     print(f"Linked {f} -> \"{meta['title']}\" (page {args.page_id}, remote v{meta['version']['number']})."
@@ -563,7 +610,7 @@ def cmd_pull(args):
         remote_v = page["version"]["number"]
         remote_md = storage_to_md(page["body"]["storage"]["value"])
 
-        local_dirty = local.exists() and sha256(local.read_text(encoding="utf-8")) != entry["hash"]
+        local_dirty = local.exists() and local_body_hash(local) != entry["hash"]
         fm_fields = build_confluence_frontmatter(cfg, mapping, page)
         existing_fm = read_local_frontmatter(local)
 
@@ -578,7 +625,8 @@ def cmd_pull(args):
         final_text = apply_frontmatter(remote_md, existing_fm, fm_fields)
         local.parent.mkdir(parents=True, exist_ok=True)
         local.write_text(final_text, encoding="utf-8")
-        entry.update(version=remote_v, hash=sha256(final_text), title=page["title"])
+        entry.update(version=remote_v, hash=body_hash(final_text),
+                     hash_algo=HASH_ALGO, title=page["title"])
         save_json(MAPPING_FILE, mapping)
         print(f"{f}: pulled v{remote_v} (\"{page['title']}\")")
 
@@ -614,9 +662,59 @@ def cmd_push(args):
     final_text = apply_frontmatter(md_text, existing_fm, fm_fields)
     local.write_text(final_text, encoding="utf-8")
 
-    entry.update(version=result["version"]["number"], hash=sha256(final_text))
+    entry.update(version=result["version"]["number"], hash=body_hash(final_text),
+                 hash_algo=HASH_ALGO)
     save_json(MAPPING_FILE, mapping)
     print(f"{f}: pushed as v{result['version']['number']} - \"{message}\"")
+
+
+def cmd_rebaseline(args):
+    """Migrate mapping entries from the <=0.3.0 whole-file hash to the body-only hash.
+
+    Deliberately a separate, explicit command rather than a silent migration on first
+    run: a file could hold a genuine un-pushed local edit made before the upgrade, and
+    silently re-baselining would bury it. --check reports without writing.
+    """
+    mapping = load_json(MAPPING_FILE, {})
+    if not mapping:
+        print("No files linked yet.")
+        return
+
+    stale, migrated, missing = [], [], []
+    for f, entry in sorted(mapping.items()):
+        if not is_legacy(entry):
+            continue
+        local = VAULT / f
+        if not local.exists():
+            missing.append(f)
+            continue
+        new_hash = local_body_hash(local)
+        if args.check:
+            state = "unchanged" if new_hash == entry["hash"] else "hash will change"
+            stale.append(f"  {f}  ({state})")
+            continue
+        entry["hash"] = new_hash
+        entry["hash_algo"] = HASH_ALGO
+        migrated.append(f)
+
+    if args.check:
+        print("\n".join(stale) if stale else "Nothing to migrate.")
+        for f in missing:
+            print(f"  {f}  (local file missing, skipped)")
+        print(f"\n{len(stale)} entr{'y' if len(stale) == 1 else 'ies'} would be migrated."
+              "\nRe-run without --check to apply.")
+        return
+
+    for f in missing:
+        print(f"{f}: local file missing, skipped")
+    if not migrated:
+        print("Nothing to migrate. All entries already use the body-only hash.")
+        return
+    save_json(MAPPING_FILE, mapping)
+    for f in migrated:
+        print(f"rebaselined: {f}")
+    print(f"\n{len(migrated)} entr{'y' if len(migrated) == 1 else 'ies'} migrated to "
+          f"body-only hashing. Confluence was not contacted and no note was modified.")
 
 
 def cmd_users(args):
@@ -661,6 +759,9 @@ def main():
     sp = sub.add_parser("push"); sp.add_argument("file")
     sp.add_argument("-m", "--message", default=None); sp.add_argument("--force", action="store_true")
     sp.set_defaults(fn=cmd_push)
+
+    sp = sub.add_parser("rebaseline"); sp.add_argument("--check", action="store_true")
+    sp.set_defaults(fn=cmd_rebaseline)
 
     sp = sub.add_parser("users"); sp.add_argument("query")
     sp.add_argument("--add", action="store_true"); sp.set_defaults(fn=cmd_users)
