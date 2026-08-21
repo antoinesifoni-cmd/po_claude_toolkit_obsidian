@@ -1,9 +1,9 @@
 {
   "name": "confluence-sync",
-  "version": "0.4.0",
-  "description": "Git-like pull/push/status sync between local Markdown notes (Obsidian vault) and Confluence Cloud pages. Supports version messages, optimistic-locking conflict detection, Jira smart links, PlantUML and Mermaid diagrams, Confluence user mentions, note frontmatter mirroring (including live page version) and folder name sync.",
+  "version": "0.5.0",
+  "description": "Git-like pull/push/status sync between local Markdown notes (Obsidian vault) and Confluence Cloud pages, plus one-pass creation of a whole page/folder tree from a spec. Supports version messages, optimistic-locking conflict detection, Jira smart links, PlantUML and Mermaid diagrams, Confluence user mentions, note frontmatter mirroring (including live page version) and folder name sync.",
   "author": {
     "name": "Antoine Sifoni"
   },
-  "keywords": ["confluence", "obsidian", "sync", "jira", "plantuml", "mermaid", "product-owner"]
+  "keywords": ["confluence", "obsidian", "sync", "scaffold", "jira", "plantuml", "mermaid", "product-owner"]
 }

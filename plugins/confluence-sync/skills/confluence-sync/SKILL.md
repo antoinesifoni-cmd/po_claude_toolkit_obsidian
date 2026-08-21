@@ -1,11 +1,13 @@
 ---
 name: confluence-sync
 description: >
-  Git-like sync between local Markdown files (Obsidian vault) and Confluence Cloud pages.
+  Git-like sync between local Markdown files (Obsidian vault) and Confluence Cloud pages,
+  and creation of new Confluence pages, folders, or a whole page tree from a spec.
   Use whenever the user asks to pull, push, sync, link, or check the status of Confluence pages
   against local notes, mentions "conf pull", "conf push", version conflicts with Confluence,
-  or wants to publish a note to Confluence with a version message. Also use to look up
-  Confluence users for the mentions map (users.json).
+  or wants to publish a note to Confluence with a version message. Also use when they want to
+  CREATE a new Confluence page or folder from a vault note, or scaffold a nested structure in
+  Confluence and Obsidian at once. Also use to look up Confluence users for the mentions map.
 ---
 
 # Confluence Sync
@@ -48,6 +50,19 @@ inside the vault.
 - `link-folder <folder> <folderId>` — map a local Obsidian folder to an existing
   Confluence *folder* (the organizational container, not a page - no body content).
   Folder id is the number in `.../wiki/spaces/<space>/folder/<folderId>`.
+
+### Creating (as opposed to linking)
+
+`link`/`link-folder` attach to something that already exists. These make new ones and
+link them in the same step:
+
+- `create-page <file.md> --parent <id> [--title T] [--space <id>|personal]` — create a new
+  Confluence page from a local note (empty note is fine) and link it. `--parent` accepts a
+  page id **or** a folder id. Title defaults to the filename.
+- `create-folder <dir> --parent <id> [--title T] [--space <id>|personal]` — create a new
+  Confluence folder, create the matching local directory, and link them.
+- `scaffold <spec.yaml> [--parent <id>] [--space ...] [--dry-run]` — create a whole nested
+  tree in one pass. **This is the command to use for a new project.** See below.
 - `rebaseline [--check]` — one-time migration of `mapping.json` entries written by
   v0.3.0 or earlier to body-only hashing (see below). `--check` reports without writing.
   Touches only `mapping.json`: never contacts Confluence, never modifies a note.
@@ -77,6 +92,54 @@ Consequences to know:
   Migration is deliberately manual, not silent: a note could hold a genuine un-pushed
   edit made before the upgrade, and a silent re-baseline would bury it. Review the
   flagged files first, then run `rebaseline`.
+
+## Scaffolding a new structure (`scaffold`)
+
+`scaffold` reads a YAML (or JSON) spec describing a tree, then walks it parents-first,
+creating each node in Confluence and mirroring it into the vault at the matching path.
+
+```yaml
+space: "103514172"        # optional. an id, or "personal". omit to inherit from parent
+parent: "1154842646"      # optional. page id OR folder id. omit to land at space root
+base: "Confluence Projects"   # optional. vault-relative dir the tree is created under
+tree:
+  - type: folder
+    title: "PT-1947 - CNESST, Obstetrical Files"
+    children:
+      - type: page
+        title: "PT-1947 - Read Me"
+        body: |
+          ## Informations
+          ...markdown...
+      - type: folder
+        title: "PT-1947 - Initial Analysis"
+        children:
+          - type: page
+            title: "PT-1947 - User Interviews"
+```
+
+- Local path mirrors the Confluence tree: folder nodes become directories, page nodes
+  become `<title>.md` inside their parent directory. Characters Confluence allows in a
+  title but Windows forbids in a filename (`: / \ ? * " < > |`) are replaced with `-`;
+  set `name:` on a node to control the local basename explicitly.
+- Only folders can have `children` — a page with children is an error, not a silent
+  reparent. Nest under a folder instead.
+- `body:` seeds the local note before creation. It is skipped if the file already exists,
+  so a hand-written note is never clobbered by the spec.
+- **Idempotent.** A node whose local path is already in `mapping.json`/`folders.json` is
+  skipped and its existing id reused as the parent for its children. If a run dies
+  halfway (network, permissions, a duplicate title), just re-run the same spec.
+- **Always `--dry-run` first** and show the user the tree. Creating 15 pages in the wrong
+  parent is annoying to undo.
+
+### Where does it go?
+
+Space and parent resolve in this order: an explicit `--space` wins; otherwise the space is
+inherited from `--parent` (so a single page id is usually all you need); with no parent at
+all, the tree lands at the root of the user's personal space.
+
+**Ask the user for the parent if they did not say where.** Do not guess a parent. If they
+still give nothing after being asked, fall back to the personal space (`--space personal`).
 
 ## Folder name sync (one-way, Confluence wins)
 
@@ -140,6 +203,11 @@ See `references/transforms.md` for details. Summary:
 
 - Pushing publishes to the company wiki and mentions notify people: before any push,
   state the target page title and version message and get user confirmation.
+- Creation is publishing too. Before `create-page`/`create-folder`/`scaffold`, state the
+  target space, the parent, and the full list of titles, and get user confirmation. For
+  `scaffold` that means showing the `--dry-run` output first.
+- There is no `delete` command on purpose. If a scaffold went to the wrong place, tell the
+  user which pages/folders to remove in Confluence rather than removing them yourself.
 - Round-tripping is lossy for complex Confluence content (macros, layouts, statuses).
   Warn the user before the FIRST push to a page that was authored in Confluence:
   recommend pulling first and checking the markdown looks complete.
