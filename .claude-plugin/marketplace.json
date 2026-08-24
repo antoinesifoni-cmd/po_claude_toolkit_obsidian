@@ -1,6 +1,6 @@
 {
   "name": "po-claude-toolkit",
-  "version": "0.3.0",
+  "version": "0.6.0",
   "description": "Product Owner toolkit for Obsidian + Claude Code: git-like sync between an Obsidian vault and Confluence, with Jira links, PlantUML and user mentions support.",
   "owner": {
     "name": "Antoine Sifoni"

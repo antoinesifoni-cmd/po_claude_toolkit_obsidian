@@ -8,6 +8,9 @@ Commands:
   push         <file> -m "msg"     Upload local markdown -> Confluence (optimistic lock)
   link         <file> <pageId>     Map a local file to an existing Confluence page
   link-folder  <folder> <folderId> Map a local folder to an existing Confluence folder
+  create-page   <file>   --parent <id>  Create a NEW Confluence page from a local note
+  create-folder <folder> --parent <id>  Create a NEW Confluence folder + local directory
+  scaffold     <spec.yaml>         Create a whole folder/page tree in one pass
   rebaseline   [--check]           Migrate pre-0.4.0 whole-file hashes to body-only
   users        <query>             Search Confluence users (to populate users.json)
 
@@ -33,6 +36,18 @@ Since 0.4.0 the stored hash covers the markdown body only, never the frontmatter
 frontmatter can't be push-relevant, and hashing it made Obsidian's YAML reformatting
 look like a local edit on every note. See body_hash(). Entries written by <=0.3.0 are
 flagged by `status` and migrated by `rebaseline`.
+
+The link/link-folder commands attach to pages that already exist; create-page,
+create-folder and scaffold make new ones. scaffold reads a YAML/JSON tree spec and walks
+it parents-first, creating each node in Confluence and mirroring it into the vault at the
+matching path. It is idempotent - nodes already present in mapping.json/folders.json are
+skipped and their ids reused - so an interrupted run is resumed by re-running it.
+
+A spec carries `variables` (substituted into titles and bodies as {placeholders}), a
+`frontmatter` block merged into every created note as manual properties, and per-node
+`raw` / `target` / `repeat_per_team` flags. See expand_tree() for team expansion and
+render_title() for the "{key} - {team} - {title}" convention; templates/project.yaml is
+the shipped Medfar project tree.
 
 Confluence "folders" (organizational containers, no page body) can be tracked with
 link-folder. `pull --all` then renames the local folder to match the current Confluence
@@ -204,6 +219,85 @@ def put_page(cfg, s, page_id, title, storage_html, new_version, message):
     return r.json()
 
 
+def post_page(cfg, s, space_id, title, parent_id, storage_html=""):
+    """Create a page. parent_id may be a page id OR a folder id - Confluence accepts both."""
+    payload = {
+        "spaceId": str(space_id),
+        "status": "current",
+        "title": title,
+        "body": {"representation": "storage", "value": storage_html},
+    }
+    if parent_id:
+        payload["parentId"] = str(parent_id)
+    r = s.post(f"{cfg['base_url']}/wiki/api/v2/pages", json=payload,
+               headers={"Content-Type": "application/json"})
+    if not r.ok:
+        sys.exit(f"Create page \"{title}\" failed ({r.status_code}): {r.text[:500]}")
+    return r.json()
+
+
+def post_folder(cfg, s, space_id, title, parent_id):
+    """Create an organizational folder (no body). parent may be a page or another folder."""
+    payload = {"spaceId": str(space_id), "title": title}
+    if parent_id:
+        payload["parentId"] = str(parent_id)
+    r = s.post(f"{cfg['base_url']}/wiki/api/v2/folders", json=payload,
+               headers={"Content-Type": "application/json"})
+    if not r.ok:
+        sys.exit(f"Create folder \"{title}\" failed ({r.status_code}): {r.text[:500]}")
+    return r.json()
+
+
+def resolve_node(cfg, s, node_id):
+    """(kind, meta) for an id that may be a page or a folder - callers accept either.
+
+    Confluence ids share one namespace but separate endpoints, so the only way to learn
+    which kind an id is, is to ask both. Pages are tried first (far more common as a
+    scaffold parent).
+    """
+    for kind in ("page", "folder"):
+        r = s.get(f"{cfg['base_url']}/wiki/api/v2/{kind}s/{node_id}")
+        if r.ok:
+            return kind, r.json()
+    sys.exit(f"{node_id} is neither a page nor a folder you can access "
+             f"(check the id and your permissions).")
+
+
+def personal_space_id(cfg, s):
+    """The signed-in user's own personal space (key is ~<accountId>)."""
+    r = s.get(f"{cfg['base_url']}/wiki/rest/api/user/current")
+    r.raise_for_status()
+    account_id = r.json()["accountId"]
+    r = s.get(f"{cfg['base_url']}/wiki/api/v2/spaces", params={"keys": f"~{account_id}"})
+    r.raise_for_status()
+    results = r.json().get("results", [])
+    if not results:
+        sys.exit("Could not find your personal Confluence space.")
+    return str(results[0]["id"])
+
+
+def resolve_target(cfg, s, parent, space):
+    """(space_id, parent_id) from the CLI/spec pair, with a personal-space fallback.
+
+    Precedence: an explicit --space wins; otherwise the space is inherited from the
+    parent, which is what you want when someone hands over a single page id. With no
+    parent at all, everything lands at the root of the user's personal space - the
+    "I did not say where" default.
+    """
+    parent_id = str(parent) if parent else None
+    if space and str(space).lower() == "personal":
+        return personal_space_id(cfg, s), parent_id
+    if space:
+        return str(space), parent_id
+    if parent_id:
+        _, meta = resolve_node(cfg, s, parent_id)
+        return str(meta["spaceId"]), parent_id
+    cfg_space = cfg.get("default_space_id")
+    if cfg_space:
+        return str(cfg_space), None
+    return personal_space_id(cfg, s), None
+
+
 def upload_attachment(cfg, s, page_id, filepath: Path):
     """Upload/replace an attachment on a page (v1 endpoint - v2 has no upload)."""
     url = f"{cfg['base_url']}/wiki/rest/api/content/{page_id}/child/attachment"
@@ -282,6 +376,16 @@ def build_confluence_frontmatter(cfg, mapping: dict, meta: dict) -> dict:
             if str(entry.get("page_id")) == str(parent_id):
                 fields["up"] = f"[[{Path(rel_path).stem}]]"
                 break
+
+    # A page parented by a *folder* has no parent note to link, and Obsidian wikilinks
+    # can only target notes - so scaffold records an anchor note per entry and `up` falls
+    # back to it. Persisted in mapping.json rather than recomputed from Confluence
+    # ancestry because the anchor (a project's Read Me) is typically a *sibling* of the
+    # folders, never an ancestor, so ancestry can never find it.
+    if "up" not in fields:
+        own = next((e for e in mapping.values() if str(e.get("page_id")) == str(meta["id"])), None)
+        if own and own.get("up_note"):
+            fields["up"] = f"[[{own['up_note']}]]"
 
     webui = (meta.get("_links") or {}).get("webui", "")
     space_match = re.match(r"/spaces/([^/]+)/pages", webui)
@@ -464,7 +568,9 @@ def cmd_status(args):
     cfg = get_config()
     s = api(cfg)
     mapping = load_json(MAPPING_FILE, {})
-    targets = [args.file] if args.file else sorted(mapping.keys())
+    # Normalize like pull/push do - mapping keys are OS-native relative paths, so a
+    # forward-slash argument on Windows would otherwise never match and report "not linked".
+    targets = [rel(Path(args.file))] if args.file else sorted(mapping.keys())
     if not targets:
         print("No files linked yet. Use: conf.py link <file> <pageId>")
         return
@@ -717,6 +823,357 @@ def cmd_rebaseline(args):
           f"body-only hashing. Confluence was not contacted and no note was modified.")
 
 
+def register_page(cfg, s, mapping, local: Path, page_meta, body_md: str, up_note=None):
+    """Record a freshly created/linked page in mapping.json and stamp its frontmatter."""
+    f = rel(local)
+    mapping[f] = {
+        "page_id": str(page_meta["id"]),
+        "title": page_meta["title"],
+        "version": page_meta["version"]["number"],
+        "hash": "",
+        "hash_algo": HASH_ALGO,
+    }
+    if up_note:
+        mapping[f]["up_note"] = up_note
+    fields = build_confluence_frontmatter(cfg, mapping, page_meta)
+    final_text = apply_frontmatter(body_md, read_local_frontmatter(local), fields)
+    local.parent.mkdir(parents=True, exist_ok=True)
+    local.write_text(final_text, encoding="utf-8")
+    mapping[f]["hash"] = body_hash(final_text)
+    save_json(MAPPING_FILE, mapping)
+    return mapping[f]
+
+
+def create_page_here(cfg, s, space_id, title, parent_id, local: Path, mapping,
+                     message=None, up_note=None):
+    """Create a Confluence page from a local note (or an empty one) and link the two.
+
+    Pages carrying ```plantuml/```mermaid fences are created empty and then pushed,
+    because rendering a diagram uploads an attachment and that needs a page id that does
+    not exist yet. Everything else is created with its body inline, so the page starts
+    life at v1 with real content instead of an empty v1 nobody wants in the history.
+    """
+    body_md = ""
+    if local.exists():
+        body_md = split_frontmatter(local.read_text(encoding="utf-8"))[1]
+
+    has_diagrams = bool(DIAGRAM_FENCE_RE.search(body_md))
+    storage = "" if has_diagrams else md_to_storage(body_md, cfg, s, None)
+    page = post_page(cfg, s, space_id, title, parent_id, storage)
+    entry = register_page(cfg, s, mapping, local, page, body_md, up_note)
+
+    if has_diagrams:
+        storage = md_to_storage(body_md, cfg, s, page["id"])
+        result = put_page(cfg, s, page["id"], title, storage, entry["version"] + 1,
+                          message or "Initial content (confluence-sync)")
+        entry = register_page(cfg, s, mapping, local, result, body_md, up_note)
+    return entry
+
+
+def create_folder_here(cfg, s, space_id, title, parent_id, local: Path, folders):
+    """Create a Confluence folder, mirror it as a local directory, and link the two."""
+    folder = post_folder(cfg, s, space_id, title, parent_id)
+    local.mkdir(parents=True, exist_ok=True)
+    folders[rel(local)] = {
+        "folder_id": str(folder["id"]),
+        "title": folder["title"],
+        "parent_id": str(folder.get("parentId")) if folder.get("parentId") else None,
+    }
+    save_json(FOLDERS_FILE, folders)
+    return folders[rel(local)]
+
+
+def cmd_create_page(args):
+    cfg = get_config()
+    s = api(cfg)
+    local = Path(args.file)
+    if local.suffix != ".md":
+        local = local.with_suffix(".md")
+    f = rel(local)
+    mapping = load_json(MAPPING_FILE, {})
+    if f in mapping:
+        sys.exit(f"{f} is already linked to page {mapping[f]['page_id']}. "
+                 f"Use 'push' to update it.")
+
+    space_id, parent_id = resolve_target(cfg, s, args.parent, args.space)
+    title = args.title or local.stem
+    entry = create_page_here(cfg, s, space_id, title, parent_id, local, mapping, args.message)
+    print(f"created page \"{title}\" (id {entry['page_id']}, v{entry['version']}) -> {f}")
+
+
+def cmd_create_folder(args):
+    cfg = get_config()
+    s = api(cfg)
+    local = Path(args.folder)
+    folders = load_json(FOLDERS_FILE, {})
+    if local.exists() and rel(local) in folders:
+        sys.exit(f"{rel(local)} is already linked to folder {folders[rel(local)]['folder_id']}.")
+
+    space_id, parent_id = resolve_target(cfg, s, args.parent, args.space)
+    title = args.title or local.name
+    entry = create_folder_here(cfg, s, space_id, title, parent_id, local, folders)
+    print(f"created folder \"{title}\" (id {entry['folder_id']}) -> {rel(local)}")
+
+
+# Characters Confluence happily accepts in a title but Windows rejects in a filename.
+ILLEGAL_NAME_CHARS = re.compile(r'[<>:"/\\|?*]')
+
+
+def safe_name(title: str) -> str:
+    """Local file/dir name for a Confluence title (titles allow chars Windows does not)."""
+    cleaned = ILLEGAL_NAME_CHARS.sub("-", title).rstrip(". ")
+    return cleaned or "untitled"
+
+
+def load_spec(path: Path) -> dict:
+    """A scaffold spec is YAML or JSON - yaml.safe_load reads both."""
+    if not path.exists():
+        sys.exit(f"Spec file not found: {path}")
+    spec = yaml.safe_load(path.read_text(encoding="utf-8"))
+    if not isinstance(spec, dict) or "tree" not in spec:
+        sys.exit("Spec must be a mapping with a top-level 'tree' key.")
+    return spec
+
+
+# ---------------------------------------------------------------- spec templating
+
+VAR_RE = re.compile(r"\{([a-zA-Z_][a-zA-Z0-9_]*)\}")
+
+
+def substitute(text, variables: dict):
+    """Replace {placeholders} from `variables`; an unknown placeholder is left as-is.
+
+    Left as-is rather than blanked so a typo shows up in the dry-run output as a literal
+    {typo} instead of silently producing a half-empty title.
+    """
+    if not isinstance(text, str):
+        return text
+    return VAR_RE.sub(lambda m: str(variables.get(m.group(1), m.group(0))), text)
+
+
+def render_title(node, variables: dict, subst_team, prefix_team):
+    """Build a node's final Confluence title.
+
+    Convention: "{key} - {title}", or "{key} - {team} - {title}" inside a team subtree.
+    `raw: true` opts out entirely (still substituted, just not prefixed) - that is how a
+    node like CLAUDE.md keeps its exact name.
+
+    The two team arguments differ for exactly one node: the repeating wrapper itself,
+    whose title is typically "{team}". It needs the substitution but not the prefix
+    segment, or it would render as "KEY - Charting - Charting".
+    """
+    title = substitute(node.get("title", ""), {**variables, "team": subst_team or ""})
+    if not title:
+        sys.exit(f"Every node needs a 'title' (offending node: {node!r}).")
+    if node.get("raw"):
+        return title
+    return " - ".join(p for p in (variables.get("key"), prefix_team, title) if p)
+
+
+def expand_tree(nodes, variables: dict, team=None):
+    """Resolve variables and expand `repeat_per_team` into a concrete tree.
+
+    A `repeat_per_team` node is emitted once per team, and every node beneath it picks up
+    the team segment in its title - Confluence enforces unique page titles per space, so
+    two teams sharing a leaf title like "Scope definition" would otherwise collide on
+    creation. The repeating node's own title carries the team already (it is typically
+    "{team}"), so it does not get the segment twice.
+
+    With `teams: []` the node collapses and splices its children into its parent, which
+    is what makes single-team mode read exactly like the tree as written.
+    """
+    out = []
+    for node in nodes or []:
+        kind = node.get("type", "page")
+        if kind not in ("page", "folder"):
+            sys.exit(f"Unknown node type {kind!r} (expected 'page' or 'folder').")
+
+        if node.get("repeat_per_team"):
+            teams = variables.get("teams") or []
+            if not teams:
+                out.extend(expand_tree(node.get("children"), variables, team))
+                continue
+            for t in teams:
+                out.append(render_node(node, variables, self_team=None, child_team=t))
+            continue
+
+        out.append(render_node(node, variables, self_team=team, child_team=team))
+    return out
+
+
+def render_node(node, variables: dict, self_team, child_team):
+    kind = node.get("type", "page")
+    rendered = {
+        "type": kind,
+        "title": render_title(node, variables,
+                              subst_team=child_team if node.get("repeat_per_team") else self_team,
+                              prefix_team=None if node.get("repeat_per_team") else self_team),
+        "target": node.get("target", "both"),
+    }
+    if rendered["target"] not in ("both", "obsidian"):
+        sys.exit(f"Unknown target {rendered['target']!r} on {rendered['title']!r} "
+                 f"(expected 'both' or 'obsidian').")
+    if node.get("name"):
+        rendered["name"] = substitute(node["name"], {**variables, "team": child_team or ""})
+    if node.get("body"):
+        rendered["body"] = substitute(node["body"], {**variables, "team": child_team or ""})
+    if node.get("anchor"):
+        rendered["anchor"] = True
+    if node.get("children"):
+        rendered["children"] = expand_tree(node["children"], variables, child_team)
+    return rendered
+
+
+def local_path_for(node, base_dir: Path) -> Path:
+    """Vault path mirroring a node: folders become directories, pages become <name>.md."""
+    name = node.get("name") or safe_name(node["title"])
+    if node["type"] == "folder":
+        return base_dir / name
+    return base_dir / (name if name.endswith(".md") else f"{name}.md")
+
+
+def walk_spec(nodes, base_dir: Path, depth=0):
+    """Yield (node, local_path, depth) depth-first, parents before their children."""
+    for node in nodes or []:
+        local = local_path_for(node, base_dir)
+        yield node, local, depth
+        if node["type"] == "folder":
+            yield from walk_spec(node.get("children"), local, depth + 1)
+        elif node.get("children"):
+            sys.exit(f"Page {node['title']!r} has children - only folders can nest. "
+                     f"Make it a folder, or move the children up.")
+
+
+def seed_note(local: Path, body: str, extra_fm: dict):
+    """Write a note that does not exist yet, with the spec's frontmatter keys on top.
+
+    Those keys (typically `tags`) sit outside CONFSYNC_FM_KEYS, so every later pull/push
+    preserves them as manual properties. An existing file is never touched - a note you
+    have already written beats the template.
+    """
+    if local.exists():
+        return False
+    local.parent.mkdir(parents=True, exist_ok=True)
+    local.write_text(render_frontmatter(extra_fm) + (body or ""), encoding="utf-8")
+    return True
+
+
+def cmd_scaffold(args):
+    """Create a whole folder/page tree in Confluence and mirror it into the vault.
+
+    Idempotent by design: a node whose local path is already in mapping.json/folders.json
+    is skipped and its existing id is reused as the parent for its children, so a run
+    interrupted halfway (network, permissions, a title clash) can simply be re-run.
+    """
+    cfg = get_config()
+    s = api(cfg)
+    spec = load_spec(Path(args.spec))
+
+    variables = dict(spec.get("variables") or {})
+    for override in args.set or []:
+        if "=" not in override:
+            sys.exit(f"--set expects key=value, got {override!r}")
+        k, v = override.split("=", 1)
+        variables[k] = [p.strip() for p in v.split(",") if p.strip()] if k == "teams" else v
+
+    parent = args.parent or substitute(spec.get("parent"), variables)
+    space = args.space or substitute(spec.get("space"), variables)
+    space_id, root_parent_id = resolve_target(cfg, s, parent, space)
+
+    base = substitute(spec.get("base"), variables)
+    base_dir = (VAULT / base) if base else VAULT
+    extra_fm = {k: substitute(v, variables) if isinstance(v, str) else
+                [substitute(i, variables) for i in v] if isinstance(v, list) else v
+                for k, v in (spec.get("frontmatter") or {}).items()}
+
+    mapping = load_json(MAPPING_FILE, {})
+    folders = load_json(FOLDERS_FILE, {})
+
+    tree = expand_tree(spec["tree"], variables)
+    plan = list(walk_spec(tree, base_dir))
+    if not plan:
+        sys.exit("Spec has an empty tree - nothing to create.")
+
+    # The anchor is the note every other note points at with frontmatter `up`. Obsidian
+    # wikilinks can only target notes, and in a folders-only tree a page's parent is
+    # almost always a folder, which has no note behind it - so `up` would otherwise be
+    # empty on nearly every page. Defaults to the first synced page in the tree (the
+    # project's Read Me); mark another node `anchor: true` to override.
+    anchor = next((n for n, _, _ in plan
+                   if n["type"] == "page" and n.get("anchor") and n["target"] == "both"), None)
+    if anchor is None:
+        anchor = next((n for n, _, _ in plan
+                       if n["type"] == "page" and n["target"] == "both"), None)
+    anchor_stem = None
+    if anchor is not None:
+        anchor_stem = local_path_for(anchor, base_dir).stem
+
+    teams = variables.get("teams") or []
+    where = f"space {space_id}" + (f", under {root_parent_id}" if root_parent_id else ", at space root")
+    print(f"Scaffolding {len(plan)} node(s) into {where}")
+    if teams:
+        print(f"teams: {', '.join(teams)}")
+    if anchor_stem:
+        print(f"up anchor: [[{anchor_stem}]]")
+    print()
+
+    # local dir -> confluence id, so each child can find the parent created moments ago
+    parent_ids = {base_dir.resolve(): root_parent_id}
+    created = skipped = local_only = 0
+
+    for node, local, depth in plan:
+        kind, title, target = node["type"], node["title"], node["target"]
+        f = rel(local)
+        indent = "  " * depth
+
+        if target == "obsidian":
+            if args.dry_run:
+                print(f"{indent}+ {local.name}  [obsidian only]")
+            else:
+                wrote = seed_note(local, node.get("body", ""), extra_fm) if kind == "page" \
+                    else (local.mkdir(parents=True, exist_ok=True) or True)
+                print(f"{indent}{'+' if wrote else '-'} {local.name}  "
+                      f"[obsidian only{'' if wrote else ', exists'}]")
+            local_only += 1
+            continue
+
+        store = folders if kind == "folder" else mapping
+        id_key = "folder_id" if kind == "folder" else "page_id"
+        existing = store.get(f)
+        if existing:
+            print(f"{indent}- {title}  [exists, {id_key}={existing[id_key]}]")
+            parent_ids[local.resolve()] = existing[id_key]
+            skipped += 1
+            continue
+
+        if args.dry_run:
+            print(f"{indent}+ {title}  [{kind}]")
+            parent_ids[local.resolve()] = f"<{kind}:{title}>"
+            created += 1
+            continue
+
+        node_parent = parent_ids.get(local.parent.resolve(), root_parent_id)
+        if kind == "folder":
+            entry = create_folder_here(cfg, s, space_id, title, node_parent, local, folders)
+            parent_ids[local.resolve()] = entry["folder_id"]
+        else:
+            seed_note(local, node.get("body", ""), extra_fm)
+            up = anchor_stem if anchor_stem and local_path_for(node, base_dir) != \
+                local_path_for(anchor, base_dir) else None
+            entry = create_page_here(cfg, s, space_id, title, node_parent, local, mapping,
+                                     args.message or "Created from project template",
+                                     up_note=up)
+            parent_ids[local.resolve()] = entry["page_id"]
+        print(f"{indent}+ {title}  [{kind} {parent_ids[local.resolve()]}]")
+        created += 1
+
+    verb = "would create" if args.dry_run else "created"
+    print(f"\n{verb} {created} in Confluence, {local_only} Obsidian-only, "
+          f"skipped {skipped} already-linked.")
+    if not args.dry_run and created:
+        print("Run 'conf.py status' to confirm, or edit the notes and 'push' them.")
+
+
 def cmd_users(args):
     cfg = get_config()
     s = api(cfg)
@@ -762,6 +1219,25 @@ def main():
 
     sp = sub.add_parser("rebaseline"); sp.add_argument("--check", action="store_true")
     sp.set_defaults(fn=cmd_rebaseline)
+
+    sp = sub.add_parser("create-page"); sp.add_argument("file")
+    sp.add_argument("--parent", default=None); sp.add_argument("--space", default=None)
+    sp.add_argument("--title", default=None); sp.add_argument("-m", "--message", default=None)
+    sp.set_defaults(fn=cmd_create_page)
+
+    sp = sub.add_parser("create-folder"); sp.add_argument("folder")
+    sp.add_argument("--parent", default=None); sp.add_argument("--space", default=None)
+    sp.add_argument("--title", default=None)
+    sp.set_defaults(fn=cmd_create_folder)
+
+    sp = sub.add_parser("scaffold"); sp.add_argument("spec")
+    sp.add_argument("--parent", default=None); sp.add_argument("--space", default=None)
+    sp.add_argument("-m", "--message", default=None)
+    sp.add_argument("--set", action="append", metavar="KEY=VALUE",
+                    help="override a spec variable, e.g. --set key=PT-1947 "
+                         "--set teams=Charting,L&D Rx (repeatable)")
+    sp.add_argument("--dry-run", action="store_true")
+    sp.set_defaults(fn=cmd_scaffold)
 
     sp = sub.add_parser("users"); sp.add_argument("query")
     sp.add_argument("--add", action="store_true"); sp.set_defaults(fn=cmd_users)

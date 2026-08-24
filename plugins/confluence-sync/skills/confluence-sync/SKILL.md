@@ -1,11 +1,13 @@
 ---
 name: confluence-sync
 description: >
-  Git-like sync between local Markdown files (Obsidian vault) and Confluence Cloud pages.
+  Git-like sync between local Markdown files (Obsidian vault) and Confluence Cloud pages,
+  and creation of new Confluence pages, folders, or a whole page tree from a spec.
   Use whenever the user asks to pull, push, sync, link, or check the status of Confluence pages
   against local notes, mentions "conf pull", "conf push", version conflicts with Confluence,
-  or wants to publish a note to Confluence with a version message. Also use to look up
-  Confluence users for the mentions map (users.json).
+  or wants to publish a note to Confluence with a version message. Also use when they want to
+  CREATE a new Confluence page or folder from a vault note, or scaffold a nested structure in
+  Confluence and Obsidian at once. Also use to look up Confluence users for the mentions map.
 ---
 
 # Confluence Sync
@@ -48,6 +50,19 @@ inside the vault.
 - `link-folder <folder> <folderId>` — map a local Obsidian folder to an existing
   Confluence *folder* (the organizational container, not a page - no body content).
   Folder id is the number in `.../wiki/spaces/<space>/folder/<folderId>`.
+
+### Creating (as opposed to linking)
+
+`link`/`link-folder` attach to something that already exists. These make new ones and
+link them in the same step:
+
+- `create-page <file.md> --parent <id> [--title T] [--space <id>|personal]` — create a new
+  Confluence page from a local note (empty note is fine) and link it. `--parent` accepts a
+  page id **or** a folder id. Title defaults to the filename.
+- `create-folder <dir> --parent <id> [--title T] [--space <id>|personal]` — create a new
+  Confluence folder, create the matching local directory, and link them.
+- `scaffold <spec.yaml> [--parent <id>] [--space ...] [--dry-run]` — create a whole nested
+  tree in one pass. **This is the command to use for a new project.** See below.
 - `rebaseline [--check]` — one-time migration of `mapping.json` entries written by
   v0.3.0 or earlier to body-only hashing (see below). `--check` reports without writing.
   Touches only `mapping.json`: never contacts Confluence, never modifies a note.
@@ -77,6 +92,162 @@ Consequences to know:
   Migration is deliberately manual, not silent: a note could hold a genuine un-pushed
   edit made before the upgrade, and a silent re-baseline would bury it. Review the
   flagged files first, then run `rebaseline`.
+
+## Scaffolding a new structure (`scaffold`)
+
+`scaffold` reads a YAML (or JSON) spec describing a tree, then walks it parents-first,
+creating each node in Confluence and mirroring it into the vault at the matching path.
+
+```yaml
+space: "103514172"        # optional. an id, or "personal". omit to inherit from parent
+parent: "1154842646"      # optional. page id OR folder id. omit to land at space root
+base: "Confluence Projects"   # optional. vault-relative dir the tree is created under
+tree:
+  - type: folder
+    title: "PT-1947 - CNESST, Obstetrical Files"
+    children:
+      - type: page
+        title: "PT-1947 - Read Me"
+        body: |
+          ## Informations
+          ...markdown...
+      - type: folder
+        title: "PT-1947 - Initial Analysis"
+        children:
+          - type: page
+            title: "PT-1947 - User Interviews"
+```
+
+- Local path mirrors the Confluence tree: folder nodes become directories, page nodes
+  become `<title>.md` inside their parent directory. Characters Confluence allows in a
+  title but Windows forbids in a filename (`: / \ ? * " < > |`) are replaced with `-`;
+  set `name:` on a node to control the local basename explicitly.
+- Only folders can have `children` — a page with children is an error, not a silent
+  reparent. Nest under a folder instead.
+- `body:` seeds the local note before creation. It is skipped if the file already exists,
+  so a hand-written note is never clobbered by the spec.
+- **Idempotent.** A node whose local path is already in `mapping.json`/`folders.json` is
+  skipped and its existing id reused as the parent for its children. If a run dies
+  halfway (network, permissions, a duplicate title), just re-run the same spec.
+- **Always `--dry-run` first** and show the user the tree. Creating 15 pages in the wrong
+  parent is annoying to undo.
+- The Medfar project tree ships as `templates/project.yaml`. For a new project, start
+  there rather than hand-writing a spec — see "Creating a new project" below.
+
+### Spec templating
+
+A spec can carry variables and a per-team split, so one template serves every project.
+
+```yaml
+variables:
+  key: "PT-1947"                 # Jira key. prefixes every title
+  name: "CNESST, Obstetrical Files"
+  teams: []                      # [] = single team. ["Charting","L&D Rx"] = per-team split
+parent: "1154842646"
+base: "Confluence Projects"
+frontmatter:                     # merged into every note as manual properties
+  tags: ["{key}"]
+tree: ...
+```
+
+Override any variable from the command line: `--set key=PT-1947 --set teams=Charting,"L&D Rx"`
+(`teams` is comma-split; every other value is taken literally). `--set` beats the spec.
+
+**Title convention.** A node's title renders as `"{key} - {title}"`, or
+`"{key} - {team} - {title}"` inside a team subtree. The team segment is not decoration:
+Confluence enforces unique page titles per space, so two teams sharing a leaf title like
+`Scope definition` would fail on creation. `raw: true` opts a node out of the prefix
+entirely — that is how `CLAUDE.md` keeps its exact filename.
+
+**`repeat_per_team`.** Put it on a folder titled `"{team}"`. That folder is emitted once
+per team, and everything beneath it inherits the team segment. With `teams: []` the folder
+**collapses** and splices its children into its parent, so single-team mode reads exactly
+like the tree as written. Unknown `{placeholders}` are left verbatim so a typo shows up in
+the dry run instead of silently producing a half-empty title.
+
+**`target`.** `both` (default) creates in Confluence and in the vault. `obsidian` creates
+a local note only — never pushed, never linked, absent from mapping.json. Use it for
+`CLAUDE.md` and any working note that should not reach the wiki. There is deliberately no
+Confluence-only target: mapping.json is keyed by local path, so a page with no note behind
+it could not be tracked, pushed, or pulled.
+
+**Only folders can have children.** A page with children is an error, not a silent
+reparent. If a section needs both a body and children, make it a folder plus a page
+inside it.
+
+### The `up` anchor
+
+Obsidian wikilinks can only point at notes, and in a folders-only tree a page's parent is
+almost always a *folder* — which has no note behind it. So `up` would be empty on nearly
+every page. Instead, one page is the anchor (`anchor: true`, defaulting to the first
+synced page in the tree, i.e. the project's Read Me) and every other note's `up` points
+there.
+
+The anchor is stored per entry in mapping.json as `up_note`, so it survives every later
+pull and push. It is *not* derived from Confluence ancestry, because the anchor is
+typically a sibling of the folders rather than an ancestor of anything — ancestry can
+never find it.
+
+### Where does it go?
+
+Space and parent resolve in this order: an explicit `--space` wins; otherwise the space is
+inherited from `--parent` (so a single page id is usually all you need); with no parent at
+all, the tree lands at the root of the user's personal space.
+
+**Ask the user for the parent if they did not say where.** Do not guess a parent. If they
+still give nothing after being asked, fall back to the personal space (`--space personal`).
+
+## Creating a new project
+
+This is the flow when the user says "create a new project", "set up PT-1947", "scaffold
+the Confluence structure for X". The tree ships as `templates/project.yaml`.
+
+### 1. Collect four things
+
+| Variable | Notes |
+|---|---|
+| `key` | Jira key, e.g. `PT-1947`. Extract it from a Jira link if one was given. Required — every title is prefixed with it. |
+| `name` | Project name without the key, e.g. `CNESST, Obstetrical Files`. |
+| `parent` | Confluence page or folder id the project nests under. |
+| `teams` | Omit for a single-team project. Otherwise the list, e.g. `Charting, L&D Rx`. |
+
+Ask for whatever was not in the prompt, in **one** batch of questions, not one at a time.
+
+**On `parent`:** ask where it goes; do not guess. Real projects live under a product page
+in the PD space (`MYLE`, `CareWay`, `Careway Mobile`), so offering those as options is
+usually right. If the user still gives nothing after being asked, fall back to their
+personal space with `--space personal` and say that is what you did.
+
+### 2. Dry run, then confirm
+
+```
+conf.py scaffold <plugin>/skills/confluence-sync/templates/project.yaml \
+  --set key=PT-1947 --set "name=CNESST, Obstetrical Files" \
+  --set "teams=Charting,L&D Rx" --parent 1154842646 --dry-run
+```
+
+Show the user the whole tree it prints and get an explicit yes. A 24-page tree in the
+wrong parent is tedious to unpick — there is no undo command.
+
+### 3. Create
+
+Same command without `--dry-run`. If it dies partway (a duplicate title, a permissions
+error), fix the cause and **re-run the identical command** — already-created nodes are
+skipped, so it resumes rather than duplicating.
+
+### 4. Report
+
+Give the user the root page URL (in the Read Me note's `confluence_url` frontmatter) and
+mention the tree is now live in both places.
+
+### Customising per project
+
+Do not edit `templates/project.yaml` for a one-off. Copy it into the vault, adjust, and
+scaffold from the copy. Reserve edits to the shipped template for changes that should
+apply to every future project.
+
+Adding a team later is safe: re-run with the fuller `--set teams=...` and only the new
+team's branch is created.
 
 ## Folder name sync (one-way, Confluence wins)
 
@@ -110,12 +281,18 @@ When pull reports a conflict:
 Every `link`/`pull`/`push` rewrites a block of YAML frontmatter at the top of the note so
 the Confluence linkage is visible in Obsidian's Properties panel, not just in mapping.json:
 `title`, `page_id`, `confluence_version` (the page's current Confluence version number),
-`parent_page_id`, `confluence_space`, `confluence_url`, `up` (a `[[wikilink]]` to the
-parent note, only when that parent is also linked locally), `last_modified`, `author`.
+`parent_page_id`, `confluence_space`, `confluence_url`, `up`, `last_modified`, `author`.
+
+`up` is a `[[wikilink]]` to the parent note when the parent is itself a linked page. When
+the parent is a *folder* (which has no note, so nothing to link) it falls back to the
+scaffold's anchor note, stored per entry in mapping.json as `up_note` — see "The `up`
+anchor" above.
 
 - These 9 keys are fully owned by confsync and regenerated every sync — **don't hand-edit
   them**, edits will be overwritten on the next pull/push. Any other frontmatter property
   already on the note is left alone.
+- That is what makes the spec's `frontmatter:` block stick: `tags` and anything else it
+  writes sit outside the owned set, so every later pull and push preserves them.
 - `mapping.json` is still the actual source of truth for the optimistic-lock `version`/
   `hash` (frontmatter is a display mirror only), so a stray edit to `page_id` in Obsidian
   can't corrupt sync state — it'll just get corrected on the next sync. Frontmatter is
@@ -140,6 +317,11 @@ See `references/transforms.md` for details. Summary:
 
 - Pushing publishes to the company wiki and mentions notify people: before any push,
   state the target page title and version message and get user confirmation.
+- Creation is publishing too. Before `create-page`/`create-folder`/`scaffold`, state the
+  target space, the parent, and the full list of titles, and get user confirmation. For
+  `scaffold` that means showing the `--dry-run` output first.
+- There is no `delete` command on purpose. If a scaffold went to the wrong place, tell the
+  user which pages/folders to remove in Confluence rather than removing them yourself.
 - Round-tripping is lossy for complex Confluence content (macros, layouts, statuses).
   Warn the user before the FIRST push to a page that was authored in Confluence:
   recommend pulling first and checking the markdown looks complete.

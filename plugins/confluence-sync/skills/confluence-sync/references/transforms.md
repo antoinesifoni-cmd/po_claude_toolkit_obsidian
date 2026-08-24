@@ -94,3 +94,25 @@ page itself.
 - Complex tables (merged cells, colored cells) flatten to plain markdown tables.
 - Rule of thumb: pages owned by this workflow should stay "markdown-shaped". For pages
   heavily authored in Confluence, pull once, inspect, and decide whether to adopt them.
+
+## Not implemented: Confluence-native chrome (deferred, not rejected)
+
+Three Confluence constructs have no markdown equivalent today, so a page using them
+loses them on push. They are listed here because the project templates were originally
+written around them, and because the fix is well understood if it ever becomes worth
+doing.
+
+| Construct | Storage format | Possible local syntax |
+|---|---|---|
+| Status lozenge | `<ac:structured-macro ac:name="status">` with a `colour` parameter | an inline code span, e.g. `` `status:green:High` `` |
+| Task list | `<ac:task-list><ac:task>` with `<ac:task-status>` | GitHub-style `- [ ]` / `- [x]`, which Obsidian already renders |
+| Decision list | `<ac:structured-macro ac:name="decision-list">` | a fenced `decision` block, one item per line |
+
+Task lists are the strongest candidate: `- [ ]` already renders as a real checkbox in
+Obsidian *and* has a native Confluence counterpart, so a transform would be a genuine
+round-trip rather than a one-way flattening. Status lozenges are the weakest - the local
+syntax is invented either way, and a plain word ("High") reads fine in Obsidian.
+
+Current behaviour is a one-way flatten: markdown pushes as plain text, and any lozenge or
+decision list authored in Confluence is dropped on pull. That is a deliberate default
+given the templates are read in Obsidian far more often than in Confluence.

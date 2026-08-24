@@ -6,6 +6,13 @@ Claude Code. No server: a Python script runs on demand and exits.
 ## Features
 - `link / status / pull / push` with version messages and optimistic locking
   (push aborts if someone edited the page since your last sync)
+- `create-page / create-folder / scaffold` to CREATE new Confluence content, not just
+  attach to existing pages. `scaffold` builds a whole nested tree (a new project, say)
+  from one YAML spec, mirrors it into the vault, and links every node - idempotent, so a
+  half-finished run is fixed by re-running it
+- The Medfar project tree ships as `templates/project.yaml`: variables for the Jira key
+  and project name, an optional per-team split, Obsidian-only nodes (`CLAUDE.md`), and
+  auto-tagged frontmatter
 - Linked notes get a YAML frontmatter block (page_id, confluence_version, confluence_url,
   parent link, last modified, author, ...) so the Confluence linkage is visible in
   Obsidian's Properties panel, not just in `.confsync/mapping.json`
@@ -39,6 +46,9 @@ Claude Code. No server: a Python script runs on demand and exits.
 - "push decision-matrix.md with message 'added PT-1815 column'"
 - "link folder 'Charting PPR' to Confluence folder 5641404462" (then rename-syncs on
   every `pull --all`)
+- "create a page for this note under Confluence page 1154842646"
+- "create the PT-1947 project for CNESST under the MYLE page, teams Charting and L&D Rx"
+  (Claude fills in the shipped template, dry-runs it, shows you the tree, then creates it)
 
 Claude runs `scripts/conf.py` for you and helps merge on conflicts.
 

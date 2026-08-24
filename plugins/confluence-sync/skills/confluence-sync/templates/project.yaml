@@ -1,0 +1,163 @@
+# Medfar project scaffold.
+#
+# Run with:
+#   conf.py scaffold templates/project.yaml --set key=PT-1947 \
+#       --set name="CNESST, Obstetrical Files" --set parent=1154842646 --dry-run
+#
+# Titles render as "{key} - {title}", or "{key} - {team} - {title}" inside a team
+# subtree (Confluence enforces unique page titles per space, so two teams sharing a
+# leaf title would collide on creation). `raw: true` opts a node out of the prefix.
+#
+# Bodies are headings only, no tables - they are read in Obsidian far more often than
+# in Confluence, and markdown tables render poorly there. Customise per page later.
+
+variables:
+  key: ""                      # required, e.g. PT-1947
+  name: ""                     # required, e.g. "CNESST, Obstetrical Files"
+  teams: []                    # [] = single team. ["Charting","L&D Rx"] = per-team split
+
+parent: ""                     # Confluence page or folder id. --parent overrides
+base: "Confluence Projects"    # vault-relative directory the project is created under
+
+# Merged into every created note as manual frontmatter (outside the confsync-owned keys,
+# so every later pull/push preserves it).
+frontmatter:
+  tags: ["{key}"]
+
+tree:
+  - type: folder
+    title: "{name}"
+    children:
+
+      - type: page
+        title: "Read Me"
+        anchor: true            # every other note's frontmatter `up` points here
+        body: |
+          ## Context
+
+          ## Problem to solve
+
+          ## Scope
+
+          ## References
+
+      - type: page
+        title: "CLAUDE.md"
+        raw: true               # exact filename - Claude Code looks for this name
+        target: obsidian        # never created in Confluence
+        body: |
+          # {key} - {name}
+
+          Project context for Claude Code when working in this folder.
+
+          ## What this project is
+
+          ## Where things live
+
+          - Confluence: see `confluence_url` in each note's frontmatter
+          - Jira: {key}
+
+          ## Conventions
+
+          - Every page and folder title is prefixed `{key} - `
+          - Notes here are synced with Confluence via the confluence-sync plugin;
+            run `conf.py status` before editing to check nothing moved upstream
+
+      - type: folder
+        title: "Product Owner"
+        children:
+
+          - type: folder
+            title: "General information"
+            children:
+              - type: page
+                title: "User Interviews"
+                body: |
+                  ## Participants
+
+                  ## Findings
+
+                  ## Verbatims
+              - type: page
+                title: "Competitors analysis"
+                body: |
+                  ## Competitors reviewed
+
+                  ## Findings
+
+                  ## Implications for us
+              - type: page
+                title: "Product current state"
+                body: |
+                  ## Current behaviour
+
+                  ## Known limitations
+
+          - type: folder
+            title: "{team}"
+            repeat_per_team: true
+            children:
+
+              - type: folder
+                title: "PO Conception"
+                children:
+                  - type: page
+                    title: "Scope definition"
+                    body: |
+                      ## In scope
+
+                      ## Out of scope
+
+                      ## Open questions
+                  - type: page
+                    title: "Product Preliminary Review"
+                    body: |
+                      ## Summary
+
+                      ## Risks and assumptions
+
+                      ## Decisions
+
+                      ## Open questions
+                  - type: page
+                    title: "Product Internal Review"
+                    body: |
+                      ## Summary
+
+                      ## Feedback
+
+                      ## Decisions
+
+                      ## Open questions
+                  - type: page
+                    title: "Product Detail Review"
+                    body: |
+                      ## Summary
+
+                      ## Detailed behaviour
+
+                      ## Edge cases
+
+                      ## Decisions
+                  - type: page
+                    title: "Handoff"
+                    body: |
+                      ## Scope recap
+
+                      ## Acceptance criteria
+
+                      ## Open questions
+
+              - type: folder
+                title: "Dev"
+
+      - type: page
+        title: "Release plan"
+        body: |
+          ## Milestones
+
+          ## Rollout
+
+          ## Feature flag
+
+          ## Rollback
