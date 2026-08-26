@@ -162,8 +162,16 @@ entirely — that is how `CLAUDE.md` keeps its exact filename.
 **`repeat_per_team`.** Put it on a folder titled `"{team}"`. That folder is emitted once
 per team, and everything beneath it inherits the team segment. With `teams: []` the folder
 **collapses** and splices its children into its parent, so single-team mode reads exactly
-like the tree as written. Unknown `{placeholders}` are left verbatim so a typo shows up in
+like the tree as written (bar nodes gated with `when:`, below). Unknown `{placeholders}` are left verbatim so a typo shows up in
 the dry run instead of silently producing a half-empty title.
+
+**`when`.** `single_team` or `multi_team` on any node drops it, and its whole subtree, in
+the other mode. Needed because a collapsing `repeat_per_team` wrapper splices its children
+into its *immediate* parent — so a node that belongs at a different depth once the wrapper
+disappears cannot be expressed by placement alone. Write it twice and gate each copy.
+`project.yaml` uses this for `Dev`: one project-level folder beside `Product Owner` for a
+single-team project, one Dev per team inside `Product Owner` when there are several. Any
+other value is an error, caught in the dry run.
 
 **`target`.** `both` (default) creates in Confluence and in the vault. `obsidian` creates
 a local note only — never pushed, never linked, absent from mapping.json. Use it for

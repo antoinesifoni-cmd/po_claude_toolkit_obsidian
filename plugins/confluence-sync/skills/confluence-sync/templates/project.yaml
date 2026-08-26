@@ -10,6 +10,13 @@
 #
 # Bodies are headings only, no tables - they are read in Obsidian far more often than
 # in Confluence, and markdown tables render poorly there. Customise per page later.
+#
+# Dev sits at a different depth depending on team count, so it is written twice and
+# gated with `when:`. Single team -> one "{key} - Dev" folder at project level, a sibling
+# of "Product Owner". Multiple teams -> one Dev per team, inside that team's folder under
+# "Product Owner", alongside its PO Conception. Placement alone cannot express this: the
+# repeat_per_team wrapper collapses into its immediate parent, so anything left inside it
+# would land in "Product Owner" in single-team mode.
 
 variables:
   key: ""                      # required, e.g. PT-1947
@@ -148,8 +155,17 @@ tree:
 
                       ## Open questions
 
+              # Multi-team only: each team gets its own Dev folder next to its
+              # conception work. Single-team projects get one project-level Dev instead
+              # (below) - the team wrapper collapses into "Product Owner", and Dev is
+              # meant to sit outside it.
               - type: folder
                 title: "Dev"
+                when: multi_team
+
+      - type: folder
+        title: "Dev"
+        when: single_team
 
       - type: page
         title: "Release plan"
