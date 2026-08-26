@@ -45,9 +45,9 @@ skipped and their ids reused - so an interrupted run is resumed by re-running it
 
 A spec carries `variables` (substituted into titles and bodies as {placeholders}), a
 `frontmatter` block merged into every created note as manual properties, and per-node
-`raw` / `target` / `repeat_per_team` flags. See expand_tree() for team expansion and
-render_title() for the "{key} - {team} - {title}" convention; templates/project.yaml is
-the shipped Medfar project tree.
+`raw` / `target` / `repeat_per_team` / `when` flags. See expand_tree() for team expansion
+and team-mode gating, and render_title() for the "{key} - {team} - {title}" convention;
+templates/project.yaml is the shipped Medfar project tree.
 
 Confluence "folders" (organizational containers, no page body) can be tracked with
 link-folder. `pull --all` then renames the local folder to match the current Confluence
@@ -981,12 +981,28 @@ def expand_tree(nodes, variables: dict, team=None):
 
     With `teams: []` the node collapses and splices its children into its parent, which
     is what makes single-team mode read exactly like the tree as written.
+
+    `when: single_team` / `when: multi_team` drops a node (and its whole subtree) in the
+    other mode. It exists because collapsing splices into the *immediate* parent, so a
+    node that needs to sit at a different depth once the team wrapper disappears cannot
+    be expressed by placement alone - it has to be written twice and gated. project.yaml
+    uses it for the Dev folder: per-team inside "Product Owner" for a multi-team project,
+    a single project-level folder otherwise.
     """
     out = []
     for node in nodes or []:
         kind = node.get("type", "page")
         if kind not in ("page", "folder"):
             sys.exit(f"Unknown node type {kind!r} (expected 'page' or 'folder').")
+
+        # `when` gates a node on team mode (see docstring). Checked before repeat_per_team
+        # so a gated-out subtree is never expanded at all.
+        when = node.get("when")
+        if when not in (None, "single_team", "multi_team"):
+            sys.exit(f"Unknown when {when!r} on node {node.get('title')!r} "
+                     f"(expected 'single_team' or 'multi_team').")
+        if when and (when == "multi_team") != bool(variables.get("teams")):
+            continue
 
         if node.get("repeat_per_team"):
             teams = variables.get("teams") or []
