@@ -1,6 +1,6 @@
 {
   "name": "confluence-sync",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "description": "Git-like pull/push/status sync between local Markdown notes (Obsidian vault) and Confluence Cloud pages, split into four skills by risk: status (read-only), link, pull, push. One link command for pages and folders that accepts a pasted URL, title search, optimistic-locking conflict detection, Jira smart links, PlantUML and Mermaid diagrams, Confluence user mentions, note frontmatter mirroring and folder name sync. Also creates pages, folders and whole project trees from a spec.",
   "author": {
     "name": "Antoine Sifoni"
