@@ -25,6 +25,23 @@ Restart Claude Code afterwards to load it.
 
 See each plugin's README for setup.
 
+### Skills are split by risk, not by feature
+
+`confluence-sync` ships four skills rather than one, so that asking a harmless question
+doesn't load the instructions for publishing to the company wiki:
+
+| Skill | Risk | Owns |
+|---|---|---|
+| `confluence-status` | none — read only | "sync", "what's the status", "what changed" |
+| `confluence-link` | low, reversible | a pasted Confluence URL, "link this", "find the page called X" |
+| `confluence-pull` | overwrites **your** work | "pull", "fetch the latest", "refresh everything" |
+| `confluence-push` | publishes, notifies people | "push", "publish this", "update the wiki page" |
+
+The ambiguous word "sync" routes to `status`, because checking state is the right first
+move whichever direction you turn out to want. Ground that belongs to more than one skill —
+the conflict merge flow, first-time setup, the content transforms — lives in the plugin's
+`references/` folder, so no skill restates another's rules.
+
 ## What this is for
 
 The working assumption is that writing happens in Obsidian, where Markdown, backlinks and

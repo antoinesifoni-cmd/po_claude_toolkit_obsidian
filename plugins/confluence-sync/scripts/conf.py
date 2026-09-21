@@ -6,8 +6,9 @@ Commands:
   status       [file]              Compare local files vs remote versions
   pull         <file|--all>        Download remote page(s) -> markdown (conflict-safe)
   push         <file> -m "msg"     Upload local markdown -> Confluence (optimistic lock)
-  link         <file> <pageId>     Map a local file to an existing Confluence page
-  link-folder  <folder> <folderId> Map a local folder to an existing Confluence folder
+  find         <title>             Search Confluence by title (to get an id to link)
+  link         <path> <url|id>     Map a note/folder to an existing page/folder
+  link-folder  <path> <url|id>     Alias for `link`, forced to folder
   create-page   <file>   --parent <id>  Create a NEW Confluence page from a local note
   create-folder <folder> --parent <id>  Create a NEW Confluence folder + local directory
   scaffold     <spec.yaml>         Create a whole folder/page tree in one pass
@@ -36,6 +37,12 @@ Since 0.4.0 the stored hash covers the markdown body only, never the frontmatter
 frontmatter can't be push-relevant, and hashing it made Obsidian's YAML reformatting
 look like a local edit on every note. See body_hash(). Entries written by <=0.3.0 are
 flagged by `status` and migrated by `rebaseline`.
+
+`link` takes a pasted Confluence URL or a bare id and works out for itself whether it
+names a page or a folder (see parse_ref): the URL path says which, and a bare id is
+probed against both endpoints. Linking a page then pulls it, because a just-linked note
+is far more often empty or stale than authoritative - pass --no-pull to opt out. `find`
+searches by title so getting an id never means leaving the editor to copy a URL.
 
 The link/link-folder commands attach to pages that already exist; create-page,
 create-folder and scaffold make new ones. scaffold reads a YAML/JSON tree spec and walks
@@ -174,6 +181,31 @@ def is_legacy(entry: dict) -> bool:
 
 def rel(path: Path) -> str:
     return str(path.resolve().relative_to(VAULT))
+
+
+# ---------------------------------------------------------------- reference parsing
+
+# Page and folder ids share one namespace, so a bare id says nothing about its kind and
+# has to be probed against both endpoints. A pasted URL already carries the kind in its
+# path, which saves the round trip and removes the ambiguity.
+_REF_PATTERNS = (
+    (re.compile(r"/pages/(\d+)"), "page"),
+    (re.compile(r"/folder/(\d+)"), "folder"),
+    (re.compile(r"[?&]pageId=(\d+)"), "page"),
+)
+
+
+def parse_ref(ref: str):
+    """(node_id, kind_hint) from a Confluence URL or a bare id; hint is None for an id."""
+    ref = ref.strip()
+    if ref.isdigit():
+        return ref, None
+    for pattern, kind in _REF_PATTERNS:
+        m = pattern.search(ref)
+        if m:
+            return m.group(1), kind
+    sys.exit(f"Could not read a page or folder id out of \"{ref}\"."
+             f"\nPaste the Confluence URL, or give the bare numeric id.")
 
 
 # ---------------------------------------------------------------- REST helpers
@@ -602,15 +634,13 @@ def cmd_status(args):
               "\nabove, then run 'conf.py rebaseline' to switch them to body-only.")
 
 
-def cmd_link(args):
-    cfg = get_config()
-    s = api(cfg)
-    meta = get_page_meta(cfg, s, args.page_id)
-    mapping = load_json(MAPPING_FILE, {})
-    f = rel(Path(args.file))
+def link_page(cfg, s, page_id, path: Path, mapping) -> str:
+    """Map a local note to an existing page. Returns the vault-relative path."""
+    meta = get_page_meta(cfg, s, page_id)
+    f = rel(path)
     local = VAULT / f
     mapping[f] = {
-        "page_id": args.page_id,
+        "page_id": page_id,
         "title": meta["title"],
         "version": 0,  # force first pull/push to be deliberate
         "hash": local_body_hash(local) if local.exists() else "",
@@ -625,27 +655,55 @@ def cmd_link(args):
         mapping[f]["hash"] = body_hash(final_text)
 
     save_json(MAPPING_FILE, mapping)
-    print(f"Linked {f} -> \"{meta['title']}\" (page {args.page_id}, remote v{meta['version']['number']})."
-          f"\nRun 'conf.py pull {f}' to fetch it.")
+    print(f"Linked {f} -> \"{meta['title']}\" (page {page_id}, remote v{meta['version']['number']}).")
+    return f
 
 
-def cmd_link_folder(args):
-    cfg = get_config()
-    s = api(cfg)
-    meta = get_folder_meta(cfg, s, args.folder_id)
-    local = Path(args.folder)
-    if not local.is_dir():
-        sys.exit(f"{local} is not an existing local folder (create it first, then link it)")
+def link_folder(cfg, s, folder_id, path: Path) -> str:
+    """Map a local directory to an existing Confluence folder."""
+    meta = get_folder_meta(cfg, s, folder_id)
+    if not path.is_dir():
+        sys.exit(f"{path} is not an existing local folder (create it first, then link it)")
     folders = load_json(FOLDERS_FILE, {})
-    f = rel(local)
+    f = rel(path)
     folders[f] = {
-        "folder_id": args.folder_id,
+        "folder_id": folder_id,
         "title": meta["title"],
         "parent_id": meta.get("parentId"),
     }
     save_json(FOLDERS_FILE, folders)
-    print(f"Linked folder {f} -> \"{meta['title']}\" (folder {args.folder_id})."
+    print(f"Linked folder {f} -> \"{meta['title']}\" (folder {folder_id})."
           f"\nRun 'conf.py pull --all' to keep its name in sync with Confluence.")
+    return f
+
+
+def cmd_link(args):
+    """link <path> <url-or-id> - page or folder, told apart by the URL or probed.
+
+    One command for both kinds because every caller (a pasted URL, a title search, a
+    folder someone just made) starts from the same place: a reference and a local path.
+    Making the user pick the right subcommand only exposes an id-namespace detail they
+    have no way to resolve themselves.
+    """
+    cfg = get_config()
+    s = api(cfg)
+    node_id, hint = parse_ref(args.ref)
+    kind = args.kind or hint or resolve_node(cfg, s, node_id)[0]
+
+    path = Path(args.path)
+    if kind == "folder":
+        link_folder(cfg, s, node_id, path)
+        return
+
+    mapping = load_json(MAPPING_FILE, {})
+    f = link_page(cfg, s, node_id, path, mapping)
+    # A freshly linked note is empty or stale far more often than it is authoritative,
+    # so taking the remote copy is the safe default: skipping it leaves a note whose
+    # next push would publish over the real page.
+    if args.no_pull:
+        print(f"Run 'conf.py pull {f}' to fetch the page content.")
+        return
+    pull_one(cfg, s, mapping, f)
 
 
 def sync_folders(cfg, s):
@@ -699,6 +757,43 @@ def sync_folders(cfg, s):
         print(f"folder: renamed \"{f}\" -> \"{new_f}\" (Confluence title changed)")
 
 
+def pull_one(cfg, s, mapping, f, force=False) -> bool:
+    """Pull one mapped file. False if it was skipped or left as a conflict.
+
+    Split out of cmd_pull so `link` can take the remote copy straight after linking,
+    without faking an args namespace.
+    """
+    entry = mapping.get(f)
+    if not entry:
+        print(f"{f}: not linked, skipping")
+        return False
+    local = VAULT / f
+    page = get_page_body(cfg, s, entry["page_id"])
+    remote_v = page["version"]["number"]
+    remote_md = storage_to_md(page["body"]["storage"]["value"])
+
+    local_dirty = local.exists() and local_body_hash(local) != entry["hash"]
+    fm_fields = build_confluence_frontmatter(cfg, mapping, page)
+    existing_fm = read_local_frontmatter(local)
+
+    if local_dirty and remote_v != entry["version"] and not force:
+        side = local.with_suffix(".remote.md")
+        side.write_text(apply_frontmatter(remote_md, existing_fm, fm_fields), encoding="utf-8")
+        print(f"{f}: CONFLICT - local edits + remote v{remote_v}."
+              f"\n  Remote saved to {side.name}. Merge manually, then push."
+              f"\n  (or re-run pull --force to overwrite local)")
+        return False
+
+    final_text = apply_frontmatter(remote_md, existing_fm, fm_fields)
+    local.parent.mkdir(parents=True, exist_ok=True)
+    local.write_text(final_text, encoding="utf-8")
+    entry.update(version=remote_v, hash=body_hash(final_text),
+                 hash_algo=HASH_ALGO, title=page["title"])
+    save_json(MAPPING_FILE, mapping)
+    print(f"{f}: pulled v{remote_v} (\"{page['title']}\")")
+    return True
+
+
 def cmd_pull(args):
     cfg = get_config()
     s = api(cfg)
@@ -707,34 +802,7 @@ def cmd_pull(args):
     mapping = load_json(MAPPING_FILE, {})
     targets = sorted(mapping.keys()) if args.all else [rel(Path(args.file))]
     for f in targets:
-        entry = mapping.get(f)
-        if not entry:
-            print(f"{f}: not linked, skipping")
-            continue
-        local = VAULT / f
-        page = get_page_body(cfg, s, entry["page_id"])
-        remote_v = page["version"]["number"]
-        remote_md = storage_to_md(page["body"]["storage"]["value"])
-
-        local_dirty = local.exists() and local_body_hash(local) != entry["hash"]
-        fm_fields = build_confluence_frontmatter(cfg, mapping, page)
-        existing_fm = read_local_frontmatter(local)
-
-        if local_dirty and remote_v != entry["version"] and not args.force:
-            side = local.with_suffix(".remote.md")
-            side.write_text(apply_frontmatter(remote_md, existing_fm, fm_fields), encoding="utf-8")
-            print(f"{f}: CONFLICT - local edits + remote v{remote_v}."
-                  f"\n  Remote saved to {side.name}. Merge manually, then push."
-                  f"\n  (or re-run pull --force to overwrite local)")
-            continue
-
-        final_text = apply_frontmatter(remote_md, existing_fm, fm_fields)
-        local.parent.mkdir(parents=True, exist_ok=True)
-        local.write_text(final_text, encoding="utf-8")
-        entry.update(version=remote_v, hash=body_hash(final_text),
-                     hash_algo=HASH_ALGO, title=page["title"])
-        save_json(MAPPING_FILE, mapping)
-        print(f"{f}: pulled v{remote_v} (\"{page['title']}\")")
+        pull_one(cfg, s, mapping, f, force=args.force)
 
 
 def cmd_push(args):
@@ -1190,6 +1258,40 @@ def cmd_scaffold(args):
         print("Run 'conf.py status' to confirm, or edit the notes and 'push' them.")
 
 
+def cmd_find(args):
+    """Search Confluence by title, so linking never requires fetching a URL by hand."""
+    cfg = get_config()
+    s = api(cfg)
+    safe = args.query.replace('"', '\\"')
+    cql = f'title ~ "{safe}"'
+    if args.space:
+        cql += f' and space = "{args.space}"'
+
+    # Folders are a newer content type and not every site indexes them under that name,
+    # so narrow first and retry untyped rather than returning an empty list on a 400.
+    def search(query):
+        return s.get(f"{cfg['base_url']}/wiki/rest/api/content/search",
+                     params={"cql": query, "limit": args.limit, "expand": "space"})
+
+    r = search(f"type in (page,folder) and {cql}")
+    if not r.ok:
+        r = search(cql)
+    if not r.ok:
+        sys.exit(f"Search failed ({r.status_code}): {r.text[:300]}")
+
+    results = r.json().get("results", [])
+    if not results:
+        print(f"Nothing titled like \"{args.query}\".")
+        return
+    for c in results:
+        space = (c.get("space") or {}).get("key", "?")
+        print(f"  {c.get('type', '?'):<7} {c['id']:<14} [{space}] {c['title']}")
+        webui = (c.get("_links") or {}).get("webui", "")
+        if webui:
+            print(f"          {cfg['base_url']}/wiki{webui}")
+    print("\nLink one with: conf.py link <path> <id>")
+
+
 def cmd_users(args):
     cfg = get_config()
     s = api(cfg)
@@ -1219,11 +1321,22 @@ def main():
 
     sp = sub.add_parser("status"); sp.add_argument("file", nargs="?"); sp.set_defaults(fn=cmd_status)
 
-    sp = sub.add_parser("link"); sp.add_argument("file"); sp.add_argument("page_id")
-    sp.set_defaults(fn=cmd_link)
+    sp = sub.add_parser("link", help="map a note or folder to an existing page/folder")
+    sp.add_argument("path"); sp.add_argument("ref", metavar="url-or-id")
+    sp.add_argument("--no-pull", action="store_true",
+                    help="don't fetch the page right after linking (pages only)")
+    sp.set_defaults(fn=cmd_link, kind=None)
 
-    sp = sub.add_parser("link-folder"); sp.add_argument("folder"); sp.add_argument("folder_id")
-    sp.set_defaults(fn=cmd_link_folder)
+    # Retained so existing muscle memory and scripts keep working; `link` now detects
+    # folders on its own, from the URL or by probing the id.
+    sp = sub.add_parser("link-folder", help="alias for `link`, forced to folder")
+    sp.add_argument("path"); sp.add_argument("ref", metavar="url-or-id")
+    sp.set_defaults(fn=cmd_link, kind="folder", no_pull=True)
+
+    sp = sub.add_parser("find", help="search Confluence by title")
+    sp.add_argument("query"); sp.add_argument("--space", default=None)
+    sp.add_argument("--limit", type=int, default=10)
+    sp.set_defaults(fn=cmd_find)
 
     sp = sub.add_parser("pull"); sp.add_argument("file", nargs="?")
     sp.add_argument("--all", action="store_true"); sp.add_argument("--force", action="store_true")
