@@ -1,7 +1,7 @@
 {
   "name": "po-claude-toolkit",
-  "version": "0.8.0",
-  "description": "Product Owner toolkit for Obsidian + Claude Code: git-like sync between an Obsidian vault and Confluence, plus creation of pages, folders and whole project trees, with Jira links, PlantUML and user mentions support.",
+  "version": "0.9.0",
+  "description": "Product Owner toolkit for Obsidian + Claude Code: git-like sync between an Obsidian vault and Confluence, plus creation of pages, folders and whole project trees, with Jira links, PlantUML and user mentions support. Also a morning routine that builds the daily note from the calendar, tasks, Gmail and Jira.",
   "owner": {
     "name": "Antoine Sifoni"
   },
@@ -19,6 +19,20 @@
         "product-owner",
         "jira",
         "plantuml"
+      ]
+    },
+    {
+      "name": "daily-note",
+      "description": "Morning routine for an Obsidian vault: /daily-note:start-my-day builds today's daily note with a Summary paragraph, an Alert list of Confluence pages that moved, and one heading per meeting from Google Calendar, then opens it with Advanced URI.",
+      "source": "./plugins/daily-note",
+      "category": "productivity",
+      "keywords": [
+        "obsidian",
+        "daily-note",
+        "google-calendar",
+        "gmail",
+        "jira",
+        "product-owner"
       ]
     }
   ]

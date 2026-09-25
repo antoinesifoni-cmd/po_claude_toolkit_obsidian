@@ -7,6 +7,7 @@ documentation workbench with Confluence as the company source of truth.
 ```
 /plugin marketplace add antoinesifoni-cmd/po_claude_toolkit_obsidian
 /plugin install confluence-sync@po-claude-toolkit
+/plugin install daily-note@po-claude-toolkit
 ```
 
 To pick up a new version later, refresh the marketplace first, then update — a plugin
@@ -22,6 +23,7 @@ Restart Claude Code afterwards to load it.
 | Plugin | Purpose |
 |---|---|
 | confluence-sync | Two-way sync between vault Markdown and Confluence pages — pull, push, conflict detection — plus creation of new pages, folders, and whole project trees from a template. Jira smart links, real user mentions, PlantUML and Mermaid diagrams. |
+| daily-note | Morning routine. `/daily-note:start-my-day` builds today's daily note: a Summary paragraph, an Alert list of Confluence pages that moved, and one heading per meeting from Google Calendar. Then it opens the note in Obsidian. |
 
 See each plugin's README for setup.
 
