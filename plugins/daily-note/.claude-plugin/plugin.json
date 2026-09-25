@@ -1,0 +1,17 @@
+{
+  "name": "daily-note",
+  "version": "0.1.0",
+  "description": "Morning routine for an Obsidian vault. /daily-note:start-my-day builds today's daily note with a Summary paragraph (meetings, tasks, Gmail Jira labels, Jira, project context), an Alert list (Confluence pages that moved) and one heading per meeting from Google Calendar, then opens it with Advanced URI. Steps are small prompt files run in a fixed order. One script does every write to the note, with a backup first.",
+  "author": {
+    "name": "Antoine Sifoni"
+  },
+  "keywords": [
+    "obsidian",
+    "daily-note",
+    "google-calendar",
+    "gmail",
+    "jira",
+    "confluence",
+    "product-owner"
+  ]
+}
