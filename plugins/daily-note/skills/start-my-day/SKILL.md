@@ -11,8 +11,8 @@ allowed-tools: Edit(.daily-note/run/**), mcp__claude_ai_Google_Calendar__list_ev
 # Start my day
 
 - Script: `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/daynote.py"`
-- Steps folder: `${CLAUDE_PLUGIN_ROOT}/skills/start-my-day/steps/`
-- Settings: `${CLAUDE_PLUGIN_ROOT}/skills/start-my-day/settings.json`
+- Steps folder: `${CLAUDE_PLUGIN_ROOT}/steps/`
+- Settings: `${CLAUDE_PLUGIN_ROOT}/config.json`
 - Run folder: `.daily-note/run/`, in the vault root. The session must be started in the vault root.
 
 ## Run order

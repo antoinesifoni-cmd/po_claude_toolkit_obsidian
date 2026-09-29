@@ -23,7 +23,7 @@ Restart Claude Code afterwards to load it.
 | Plugin | Purpose |
 |---|---|
 | confluence-sync | Two-way sync between vault Markdown and Confluence pages — pull, push, conflict detection — plus creation of new pages, folders, and whole project trees from a template. Jira smart links, real user mentions, PlantUML and Mermaid diagrams. |
-| daily-note | Morning routine. `/daily-note:start-my-day` builds today's daily note: a Summary paragraph, an Alert list of Confluence pages that moved, and one heading per meeting from Google Calendar. Then it opens the note in Obsidian. |
+| daily-note | Morning and evening routines. `/daily-note:start-my-day` builds today's daily note: a Summary paragraph, an Alert list of Confluence pages that moved, and one heading per meeting from Google Calendar. `/daily-note:end-my-day` completes it: missing meetings, transcript links with a short recap, project tags, `text-corrector` fixes, an End of day paragraph and a Review list. Say "fetch resume of this meet" to recap one meeting. |
 
 See each plugin's README for setup.
 
