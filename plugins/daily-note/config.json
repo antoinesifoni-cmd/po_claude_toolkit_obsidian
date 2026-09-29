@@ -1,0 +1,34 @@
+{
+  "gmail": {
+    "labels": ["00-Source/Jira/00-Action", "00-Source/Jira/01-Important"]
+  },
+  "jira": {
+    "site": "medfar.atlassian.net",
+    "jql": "assignee = currentUser() AND statusCategory != Done ORDER BY updated DESC"
+  },
+  "summary": {
+    "language": "English",
+    "style": [
+      "One paragraph, 4 to 6 sentences",
+      "Shape of the day first, then what is due, then what waits on me",
+      "Name projects by PT id, without the #"
+    ]
+  },
+  "recap": {
+    "language": "English",
+    "style": [
+      "Super short: one or two sentences, 30 words at most in all",
+      "The main decision or news first, then the one next step that matters most",
+      "Say 'you' for Antoine",
+      "Never start with the project id: the heading already carries it"
+    ]
+  },
+  "wrapup": {
+    "language": "English",
+    "style": [
+      "One paragraph, 4 to 6 sentences",
+      "What got done first, then what the meetings decided, then what carries over to tomorrow",
+      "Name projects by PT id, without the #"
+    ]
+  }
+}

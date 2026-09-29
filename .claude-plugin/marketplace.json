@@ -1,7 +1,7 @@
 {
   "name": "po-claude-toolkit",
-  "version": "0.9.0",
-  "description": "Product Owner toolkit for Obsidian + Claude Code: git-like sync between an Obsidian vault and Confluence, plus creation of pages, folders and whole project trees, with Jira links, PlantUML and user mentions support. Also a morning routine that builds the daily note from the calendar, tasks, Gmail and Jira.",
+  "version": "0.10.0",
+  "description": "Product Owner toolkit for Obsidian + Claude Code: git-like sync between an Obsidian vault and Confluence, plus creation of pages, folders and whole project trees, with Jira links, PlantUML and user mentions support. Also morning and evening routines for the daily note: the morning one builds it from the calendar, tasks, Gmail and Jira, the evening one completes it with meeting recaps, project tags, corrections and an End of day recap.",
   "owner": {
     "name": "Antoine Sifoni"
   },
@@ -23,13 +23,15 @@
     },
     {
       "name": "daily-note",
-      "description": "Morning routine for an Obsidian vault: /daily-note:start-my-day builds today's daily note with a Summary paragraph, an Alert list of Confluence pages that moved, and one heading per meeting from Google Calendar, then opens it with Advanced URI.",
+      "description": "Morning and evening routines for an Obsidian vault: /daily-note:start-my-day builds today's daily note with a Summary paragraph, an Alert list and one heading per meeting. /daily-note:end-my-day adds missing meetings, Gemini transcript links with a short recap, project tags, text-corrector fixes, an End of day paragraph and a Review list. meeting-recap recaps one meeting on request.",
       "source": "./plugins/daily-note",
       "category": "productivity",
       "keywords": [
         "obsidian",
         "daily-note",
         "google-calendar",
+        "google-drive",
+        "gemini",
         "gmail",
         "jira",
         "product-owner"

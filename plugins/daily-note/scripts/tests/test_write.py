@@ -127,16 +127,17 @@ class WriteTests(unittest.TestCase):
         self.assertIsNone(result["backup"])
         self.assertEqual(result["headings"], "added 2")
         text = self.read()
-        self.assertLess(text.index("# Sprint review"), text.index("# Scheduling Weekly Sync"))
-        self.assertIn("#PT-2311\n*13:00-13:30*", text)
-        self.assertIn("*09:30-10:00*", text)
+        # The compact shape: tag and time on the line right under each meeting heading.
+        self.assertIn(daynote.END + "\n\n# Sprint review\n*09:30-10:00*\n\n"
+                      "# Scheduling Weekly Sync\n#PT-2311 *13:00-13:30*\n\n\n---", text)
         self.assertTrue(text.endswith(TEMPLATE[TEMPLATE.index("---\n# Task"):]))
         lines = text.split("\n")
         rule = lines.index("---", lines.index(daynote.END))   # the "---" above "# Task"
         for i, line in enumerate(lines[:rule]):   # only headings write() adds
             if line.startswith("# ") or line.startswith("## "):
                 self.assertEqual(lines[i - 1], "", f"no blank line before {line!r}")
-                self.assertEqual(lines[i + 1], "", f"no blank line after {line!r}")
+        for heading in ("# Summary", "## Alert"):   # the block keeps its blank lines
+            self.assertEqual(lines[lines.index(heading) + 1], "")
         # The line above the "---" must be blank, or its text would become a heading.
         self.assertEqual(lines[rule - 1], "")
 
