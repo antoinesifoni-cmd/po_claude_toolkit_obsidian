@@ -882,10 +882,13 @@ def open_note(vault_name: str, rel: str):
     os.startfile hands the URI to Windows like a double-click, so no shell ever has to
     quote the & and % in it. The path is the one just written: Advanced URI creates an
     empty note when a path does not exist, so a guessed path would leave a stray file.
+    The command toggles the tab's pin: start-my-day opens a fresh tab and pins it, and
+    end-my-day lands on that pinned tab and unpins it, which is wanted.
     """
     target = rel[:-3] if rel.endswith(".md") else rel
     uri = (f"obsidian://adv-uri?vault={quote(vault_name, safe='')}"
-           f"&filepath={quote(target, safe='')}&openmode=true")
+           f"&filepath={quote(target, safe='')}&openmode=true"
+           f"&commandid={quote('workspace:toggle-pin', safe='')}")
     time.sleep(1)   # let Obsidian notice the write before the URI arrives
     try:
         os.startfile(uri)

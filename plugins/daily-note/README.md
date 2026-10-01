@@ -14,7 +14,7 @@ because they write to a vault that has no undo. `meeting-recap` is the exception
 
 ## What lands in the note
 
-**start-my-day**, in the morning, builds or updates today's note, then opens it:
+**start-my-day**, in the morning, builds or updates today's note, then opens it in a pinned tab:
 
 - **Summary:** one paragraph on how the day looks, built from your meetings, tasks due or
   overdue, the Gmail Jira labels, your open Jira issues and each project's `CLAUDE.md`.
@@ -24,7 +24,7 @@ because they write to a vault that has no undo. `meeting-recap` is the exception
   Added only while the note has no heading of your own yet, so a re-run never duplicates
   them and never touches what you wrote.
 
-**end-my-day**, in the evening, completes the note, then opens it:
+**end-my-day**, in the evening, completes the note, then opens it and unpins its tab:
 
 - **Missing meetings:** a heading for each meeting of today that the note has no section
   for, in time order. A heading you renamed still counts, when its time line is the same.
