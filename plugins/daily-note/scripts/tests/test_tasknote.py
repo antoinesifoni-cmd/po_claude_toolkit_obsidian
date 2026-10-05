@@ -23,6 +23,7 @@ CONFIG = {"task_note": {"rules": [{
     "template": "Task Note",
     "folder": FOLDER,
     "link": "[[{title}|📎]]",
+    "name": "{YY}-{MM}-{DD} - {title}",
     "title_words": 8,
     "properties": {"tags": ["TaskNote", "{tags}"], "source": "[[{source}]]"},
 }]}}
@@ -62,13 +63,13 @@ tags:
 ---
 # Sprint review
 *09:30-10:00*
-- [ ] #PT-2311 Ask Julie for the pilot dates before the clinic visit [[Ask Julie for pilot dates|📎]] 📅 2026-10-07 ➕ 2026-10-05
+- [ ] #PT-2311 Ask Julie for the pilot dates before the clinic visit [[26-10-05 - Ask Julie for pilot dates|📎]] 📅 2026-10-07 ➕ 2026-10-05
 - [ ] Book the pilot clinic 📅 2026-10-08
-- [x] Prep the release plan [[Prep the release plan|📎]] ✅ 2026-10-05
+- [x] Prep the release plan [[26-10-05 - Prep the release plan|📎]] ✅ 2026-10-05
 
 # Design check-in
 - [ ] Review the mockups with the design team [[Review the mockups|📎]] 📅 2026-10-09
-- [ ] Send the consent form to [legal](https://example.com/legal?a=b) #PT-2402 [[Send the consent form to legal|📎]]
+- [ ] Send the consent form to [legal](https://example.com/legal?a=b) #PT-2402 [[26-10-05 - Send the consent form to legal|📎]]
 Not a task, but it says #note
 
 ```
@@ -248,11 +249,22 @@ class TitleTests(unittest.TestCase):
         self.assertEqual(title("- [ ] #PT-2003 #SWAT prep the plan #note 📅 2026-10-05"),
                          "Prep the plan")
 
+    def test_note_name(self):
+        day = datetime(2026, 10, 5).date()
+        rule = dict(CONFIG["task_note"]["rules"][0])
+        self.assertEqual(tasknote.note_name(RULES[0], "Prep the plan", day),
+                         "26-10-05 - Prep the plan")
+        full = tasknote.check_rule(dict(rule, name="{YYYY}{MM}{DD} {title}"), 1)
+        self.assertEqual(tasknote.note_name(full, "Prep the plan", day), "20261005 Prep the plan")
+        plain = tasknote.check_rule({k: v for k, v in rule.items() if k != "name"}, 1)
+        self.assertEqual(tasknote.note_name(plain, "Prep the plan", day), "Prep the plan")
+
     def test_rules_are_checked(self):
         rule = dict(CONFIG["task_note"]["rules"][0])
         for key, value in (("keyword", "note"), ("folder", "../outside"),
                            ("folder", ".hidden"), ("link", "{title}"), ("title_words", 0),
-                           ("template", "")):
+                           ("template", ""), ("name", "{YY}-{MM}-{DD}"),
+                           ("name", "{YY}/{title}"), ("name", "{date} - {title}")):
             with self.subTest(key=key, value=value):
                 with self.assertRaises(Stop):
                     tasknote.check_rule(dict(rule, **{key: value}), 1)
@@ -318,10 +330,10 @@ class ScanTests(DayVault):
 class ApplyTests(DayVault):
 
     def test_check_says_what_happens(self):
-        self.put(f"{FOLDER}/Prep the release plan.md", TEMPLATE)
+        self.put(f"{FOLDER}/26-10-05 - Prep the release plan.md", TEMPLATE)
         self.scan()
         self.titles(TITLES)
-        states = [(i["id"], i["state"]) for i in tasknote.check(self.root, RULES)["items"]]
+        states = [(i["id"], i["state"]) for i in tasknote.check(self.root, RULES, NOW)["items"]]
         self.assertEqual(states, [(1, "new"), (2, "exists"), (3, "has a note"), (4, "new")])
 
     def test_batch(self):
@@ -331,13 +343,13 @@ class ApplyTests(DayVault):
         self.assertEqual(self.read("Day2Day notes/2026-10-05.md"), EXPECTED)
         self.assertEqual([r["result"] for r in out["results"]],
                          ["created", "created", "has a note", "created"])
-        self.assertEqual(self.cli.created(), [f"{FOLDER}/Ask Julie for pilot dates.md",
-                                              f"{FOLDER}/Prep the release plan.md",
-                                              f"{FOLDER}/Send the consent form to legal.md"])
-        props = self.cli.props[f"{FOLDER}/Ask Julie for pilot dates.md"]
+        self.assertEqual(self.cli.created(), [f"{FOLDER}/26-10-05 - Ask Julie for pilot dates.md",
+                                              f"{FOLDER}/26-10-05 - Prep the release plan.md",
+                                              f"{FOLDER}/26-10-05 - Send the consent form to legal.md"])
+        props = self.cli.props[f"{FOLDER}/26-10-05 - Ask Julie for pilot dates.md"]
         self.assertEqual(props["tags"], ('["TaskNote", "PT-2311"]', "list"))
         self.assertEqual(props["source"], ("[[2026-10-05]]", "text"))
-        self.assertEqual(self.cli.props[f"{FOLDER}/Prep the release plan.md"]["tags"],
+        self.assertEqual(self.cli.props[f"{FOLDER}/26-10-05 - Prep the release plan.md"]["tags"],
                          ('["TaskNote"]', "list"))
         self.assertEqual(len(out["backups"]), 1)
         self.assertEqual(self.read(out["backups"][0]), NOTE)
@@ -355,13 +367,13 @@ class ApplyTests(DayVault):
         self.assertEqual(self.read("Day2Day notes/2026-10-05.md"), EXPECTED)
 
     def test_existing_note_is_linked_never_created_again(self):
-        self.put(f"{FOLDER}/Prep the release plan.md", "my own notes\n")
+        self.put(f"{FOLDER}/26-10-05 - Prep the release plan.md", "my own notes\n")
         self.scan()
         out = self.apply({2})
         self.assertEqual(out["results"][0]["result"], "linked")
         self.assertEqual(self.cli.created(), [])
-        self.assertEqual(self.read(f"{FOLDER}/Prep the release plan.md"), "my own notes\n")
-        self.assertIn("[[Prep the release plan|📎]] ✅", self.read("Day2Day notes/2026-10-05.md"))
+        self.assertEqual(self.read(f"{FOLDER}/26-10-05 - Prep the release plan.md"), "my own notes\n")
+        self.assertIn("[[26-10-05 - Prep the release plan|📎]] ✅", self.read("Day2Day notes/2026-10-05.md"))
 
     def test_only_the_chosen_ids(self):
         self.scan()
@@ -377,18 +389,25 @@ class ApplyTests(DayVault):
         self.assertEqual(out["results"][0]["result"], "skipped")
         self.assertEqual(self.cli.created(), [])
 
+    def test_a_note_from_another_day_is_not_reused(self):
+        self.put(f"{FOLDER}/26-10-02 - Prep the release plan.md", "an older task\n")
+        self.scan()
+        items = tasknote.check(self.root, RULES, NOW)["items"]
+        self.assertIn((2, "26-10-05 - Prep the release plan", "new"),
+                      [(i["id"], i["name"], i["state"]) for i in items])
+
     def test_same_title_twice_makes_one_note(self):
         self.scan()
         self.titles({"1": "Prep the release plan"})
         out = self.apply({1, 2})
         self.assertEqual([r["result"] for r in out["results"]], ["created", "linked"])
-        self.assertEqual(self.cli.created(), [f"{FOLDER}/Prep the release plan.md"])
+        self.assertEqual(self.cli.created(), [f"{FOLDER}/26-10-05 - Prep the release plan.md"])
 
     def test_a_name_used_elsewhere_gets_a_path_link(self):
-        self.put("PDP/Prep the release plan.md", "another note\n")
+        self.put("PDP/26-10-05 - Prep the release plan.md", "another note\n")
         self.scan()
         self.apply({2})
-        self.assertIn(f"[[{FOLDER}/Prep the release plan|📎]]",
+        self.assertIn(f"[[{FOLDER}/26-10-05 - Prep the release plan|📎]]",
                       self.read("Day2Day notes/2026-10-05.md"))
 
     def test_moved_line_is_found_changed_line_is_skipped(self):
@@ -401,8 +420,8 @@ class ApplyTests(DayVault):
         out = self.apply({1, 2})
         self.assertEqual([(r["result"], r.get("detail")) for r in out["results"]], [
             ("created", None), ("skipped", "the task line changed since the scan")])
-        self.assertEqual(self.cli.created(), [f"{FOLDER}/Ask Julie for pilot dates.md"])
-        self.assertIn("[[Ask Julie for pilot dates|📎]] 📅", self.read("Day2Day notes/2026-10-05.md"))
+        self.assertEqual(self.cli.created(), [f"{FOLDER}/26-10-05 - Ask Julie for pilot dates.md"])
+        self.assertIn("[[26-10-05 - Ask Julie for pilot dates|📎]] 📅", self.read("Day2Day notes/2026-10-05.md"))
 
     def test_nothing_changes_when_the_cli_does_not_answer(self):
         self.cli = FakeCli(self.root, answers=False)
@@ -430,12 +449,12 @@ class ApplyTests(DayVault):
         self.assertEqual(self.cli.created(), [])
 
     def test_line_endings_and_bom_kept(self):
-        self.put("Day2Day notes/2026-10-05.md", "﻿" + NOTE.replace("\n", "\r\n"))
+        self.put("Day2Day notes/2026-10-05.md", "\ufeff" + NOTE.replace("\n", "\r\n"))
         self.scan()
         self.titles(TITLES)
         self.apply()
         self.assertEqual(self.read("Day2Day notes/2026-10-05.md"),
-                         "﻿" + EXPECTED.replace("\n", "\r\n"))
+                         "\ufeff" + EXPECTED.replace("\n", "\r\n"))
 
 
 if __name__ == "__main__":

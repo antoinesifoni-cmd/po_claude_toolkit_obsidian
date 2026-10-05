@@ -38,6 +38,7 @@
         "template": "Task Note",
         "folder": "Day2Day notes/00-Task Note",
         "link": "[[{title}|📎]]",
+        "name": "{YY}-{MM}-{DD} - {title}",
         "title_words": 8,
         "properties": {
           "tags": ["TaskNote", "{tags}"],

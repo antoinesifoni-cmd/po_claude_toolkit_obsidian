@@ -55,10 +55,12 @@ Tasks plugin task: checkbox, dates, Today and Overdue, nothing changes there.
   Or put `#note` in tasks anywhere, and say "make the task notes", or let end-my-day
   pick them up. Several tasks are always listed first, and nothing happens before your yes.
 - The note is created in `Day2Day notes/00-Task Note/` from your `Task Note` template,
-  through the Obsidian CLI. Its properties: `tags` (`TaskNote` and the task's own tags)
-  and `source` (the note the task lives in). AutoDater adds `Created`.
-- The task line gets `[[Title|📎]]` right before its Tasks fields, and `#note` goes away.
-  After the fields, the Tasks plugin would stop reading the dates.
+  through the Obsidian CLI, and named after the day it is made and a title:
+  `26-10-05 - Ask Julie for pilot dates`. Its properties: `tags` (`TaskNote` and the
+  task's own tags) and `source` (the note the task lives in). AutoDater adds `Created`.
+- The task line gets `[[26-10-05 - Ask Julie for pilot dates|📎]]` right before its Tasks
+  fields, and `#note` goes away. After the fields, the Tasks plugin would stop reading the
+  dates.
 - The title is the task's text when it is 8 words or fewer, with no tag past its start.
   Otherwise Claude writes a short one, shown to you first. Renaming the note later keeps
   the link.
@@ -169,6 +171,9 @@ A task note rule, as shipped:
 
 - `keyword`: the tag that asks for a note, `#note`. Any case.
 - `template` and `folder`: the template the note is made from, and where it goes.
+- `name`: the note's name. `{title}` is the title, and `{YY}` or `{YYYY}`, `{MM}`, `{DD}`
+  the day the note is made. Shipped: `{YY}-{MM}-{DD} - {title}`. A note of another day
+  never matches, so the same title on a new day gets a new note.
 - `link`: what goes in the task line. `{title}` becomes the note's name, or its path when
   another note has the same name.
 - `title_words`: a task text this short is the title as is, unless a tag sits inside it.

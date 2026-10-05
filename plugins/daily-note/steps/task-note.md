@@ -17,6 +17,7 @@ The Task note script is named in the skill that runs this step. Run it from the 
    - 3 to 8 words, in the task's language, the gist of the task
    - no tag, date, emoji or link, and none of `/ \ : * ? " < > | # ^ [ ]`
    - when Antoine named a title in his message, use his, even for an id that has one already
+   - no date in front: the Task note script adds the day the note is made, like `26-10-05 - `
 
    Write `task-titles.json` in the Run folder, in one go: `{"titles": {"1": "Ask Julie for pilot dates"}}`. Nothing to write: skip it. A task with no words gets no title, and the Task note script skips it.
 3. **Check.** Run the Task note script with `check`. It changes nothing.
@@ -27,13 +28,13 @@ The Task note script is named in the skill that runs this step. Run it from the 
 
 ## The list
 
-One line per item, in id order, then one line per refused task. No table. Made-up example:
+One line per item, in id order: its `name`, its `state`, then `where`. Then one line per refused task. No table. Made-up example:
 
 ```
 Task notes:
-1. Ask Julie for pilot dates, new (2026-10-05 > Sprint review)
-2. Prep the release plan, exists, the task gets a link to it (2026-10-05 > Mobile daily)
-3. Review the mockups, has a note already, #note goes away (2026-10-02 > Design check-in)
+1. 26-10-05 - Ask Julie for pilot dates, new (2026-10-05 > Sprint review)
+2. 26-10-05 - Prep the release plan, exists, the task gets a link to it (2026-10-05 > Mobile daily)
+3. 26-10-02 - Review the mockups, has a note already, #note goes away (2026-10-02 > Design check-in)
 Not changed:
 - Handoff: Confluence-synced note, a link there is lost on the next pull
 Create them? yes, all but 2, or no

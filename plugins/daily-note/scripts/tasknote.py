@@ -41,8 +41,9 @@ The CLI, as checked on Obsidian 1.13.7:
 The task note never holds the task's status or dates. They stay in the line, so the two
 cannot disagree. The user's template shows the task live with a Tasks query instead.
 
-The rules (keyword, template, folder, link, properties) are the task_note key of the
-plugin's config.json. Unlike daynote.py, this script reads them itself: applying a rule
+The rules (keyword, template, folder, name, link, properties) are the task_note key of
+the plugin's config.json. The name pattern can put the day the note is made in front of
+the title, like "26-10-05 - Prep the release plan". Unlike daynote.py, this script reads them itself: applying a rule
 must not depend on judgement.
 
 Standard library only.
@@ -80,12 +81,12 @@ CONFLUENCE = re.compile(r"^confluence_url\s*:")
 # link must go before them, never after: after them, the task loses its dates.
 FIELDS = (
     re.compile(r"\s+\^[A-Za-z0-9-]+$"),                                     # block link
-    re.compile(r"\s*[🔺⏫🔼🔽⏬]️?$"),                                    # priority
-    re.compile(r"\s*[📅📆🗓⏳⌛🛫➕✅❌]️?\s*\d{4}-\d{2}-\d{2}$"),         # dates
-    re.compile(r"\s*🔁️?\s*[A-Za-z0-9, !]+$"),                         # recurrence
-    re.compile(r"\s*🏁️?\s*[A-Za-z]+$"),                               # on completion
-    re.compile(r"\s*⛔️?\s*[\w-]+(?:\s*,\s*[\w-]+)*$"),                 # depends on
-    re.compile(r"\s*🆔️?\s*[\w-]+$"),                                  # id
+    re.compile(r"\s*[🔺⏫🔼🔽⏬]\ufe0f?$"),                                    # priority
+    re.compile(r"\s*[📅📆🗓⏳⌛🛫➕✅❌]\ufe0f?\s*\d{4}-\d{2}-\d{2}$"),         # dates
+    re.compile(r"\s*🔁\ufe0f?\s*[A-Za-z0-9, !]+$"),                         # recurrence
+    re.compile(r"\s*🏁\ufe0f?\s*[A-Za-z]+$"),                               # on completion
+    re.compile(r"\s*⛔\ufe0f?\s*[\w-]+(?:\s*,\s*[\w-]+)*$"),                 # depends on
+    re.compile(r"\s*🆔\ufe0f?\s*[\w-]+$"),                                  # id
 )
 END_TAG = re.compile(r"(?:^|\s+)#[^\s!@#$%^&*(),.?\":{}|<>]+$")   # a tag among the fields
 TAG = re.compile(r"(?<!\S)#([\w/-]+)")          # a tag in the text: letters, digits, _ - /
@@ -129,6 +130,10 @@ def check_rule(r, n: int) -> dict:
     link = str(r.get("link") or "[[{title}]]")
     if not (link.startswith("[[") and link.endswith("]]") and "{title}" in link):
         raise bad("link must look like [[{title}]] or [[{title}|icon]]")
+    name = str(r.get("name") or "{title}")
+    rest = re.sub(r"\{(?:title|YYYY|YY|MM|DD)\}", "", name)
+    if "{title}" not in name or FORBIDDEN.search(rest) or "{" in rest or "}" in rest:
+        raise bad("name must hold {title}, and may add the day with {YY} or {YYYY}, {MM}, {DD}")
     words = r.get("title_words", DEFAULT_WORDS)
     if not isinstance(words, int) or isinstance(words, bool) or words < 1:
         raise bad("title_words must be a whole number, 1 or more")
@@ -136,7 +141,7 @@ def check_rule(r, n: int) -> dict:
     if not isinstance(props, dict):
         raise bad("properties must be an object")
     return {"keyword": keyword, "folder": folder, "template": template, "link": link,
-            "alias": link[2:-2].split("|", 1)[1].strip() if "|" in link else "",
+            "name": name, "alias": link[2:-2].split("|", 1)[1].strip() if "|" in link else "",
             "title_words": words, "properties": props,
             "kw": re.compile(r"(?<!\S)" + re.escape(keyword) + r"(?![\w/-])", re.I)}
 
@@ -331,7 +336,7 @@ def task_text(desc: str) -> str:
     for mark in ("`", "**", "~~", "=="):
         text = text.replace(mark, "")
     text = "".join(c for c in unicodedata.normalize("NFC", text)
-                   if unicodedata.category(c) != "So" and c not in "️‍")
+                   if unicodedata.category(c) != "So" and c not in "\ufe0f\u200d")
     return " ".join(text.split()).strip(" .,;:-")
 
 
@@ -350,6 +355,15 @@ def safe_title(title) -> str:
     if first[0].islower() and first[1:] == first[1:].lower():   # "prep", not "iPhone"
         t = t[0].upper() + t[1:]
     return t
+
+
+def note_name(rule: dict, title: str, day) -> str:
+    """The note's file name from the rule's name pattern: the title, and the day the note
+    is made where the pattern asks for it, like "26-10-05 - Prep the release plan"."""
+    name = rule["name"]
+    for token, fmt in (("{YYYY}", "%Y"), ("{YY}", "%y"), ("{MM}", "%m"), ("{DD}", "%d")):
+        name = name.replace(token, day.strftime(fmt))
+    return name.replace("{title}", title)
 
 
 def note_link(core: str, rule: dict, index: dict):
@@ -501,10 +515,11 @@ def properties(rule: dict, item: dict, title: str, source: str) -> list:
     return out
 
 
-def plan(root: Path, rules=None) -> list:
+def plan(root: Path, rules=None, now=None) -> list:
     """What apply would do for each scanned item, from the scan and Claude's titles."""
     vault_root(root)
     rules = rules or load_rules()
+    day = (now or datetime.now().astimezone()).date()
     run = root / STATE_DIR / "run"
     scanned = read_json(run / RUN_FILE)
     if scanned is None:
@@ -517,16 +532,19 @@ def plan(root: Path, rules=None) -> list:
             raise Stop("The task_note rules changed since the scan. Run scan again.")
         rule = rules[item["rule"]]
         e = {"id": item["id"], "where": item["where"], "item": item, "rule": rule,
-             "title": None, "note": None, "link": None, "props": [], "reason": None}
+             "title": None, "name": None, "note": None, "link": None, "props": [],
+             "reason": None}
         out.append(e)
         if item.get("has_note"):
-            e.update(state="has a note", note=item["has_note"], title=Path(item["has_note"]).stem)
+            stem = Path(item["has_note"]).stem
+            e.update(state="has a note", note=item["has_note"], title=stem, name=stem)
             continue
         title = safe_title(titles.get(str(item["id"])) or item.get("title") or "")
         if not title:
             e.update(state="error", reason="no usable title")
             continue
-        note = f"{rule['folder']}/{title}.md"
+        name = note_name(rule, title, day)
+        note = f"{rule['folder']}/{name}.md"
         key = note.casefold()
         if key in targets:
             state = f"same note as {targets[key]}"
@@ -534,22 +552,22 @@ def plan(root: Path, rules=None) -> list:
             state = "exists" if exists(root, note, index) else "new"
             targets[key] = item["id"]
         source = link_target(item["note"], index)
-        e.update(state=state, title=title, note=note,
+        e.update(state=state, title=title, name=name, note=note,
                  link=rule["link"].replace("{title}", link_target(note, index)),
                  props=properties(rule, item, title, source))
     return out
 
 
 def public(e: dict) -> dict:
-    out = {"id": e["id"], "where": e["where"], "title": e["title"], "note": e["note"],
+    out = {"id": e["id"], "where": e["where"], "name": e["name"], "note": e["note"],
            "state": e["state"]}
     if e["reason"]:
         out["reason"] = e["reason"]
     return out
 
 
-def check(root: Path, rules=None) -> dict:
-    return {"items": [public(e) for e in plan(root, rules)]}
+def check(root: Path, rules=None, now=None) -> dict:
+    return {"items": [public(e) for e in plan(root, rules, now)]}
 
 
 def run_cli(vault: str, *args) -> str:
@@ -676,7 +694,7 @@ def apply(root: Path, ids=None, now=None, rules=None, cli=None) -> dict:
     does not answer, a template or a folder is missing."""
     now = now or datetime.now().astimezone()
     cli = cli or (lambda *a: run_cli(root.name, *a))
-    entries = plan(root, rules)
+    entries = plan(root, rules, now)
     unknown = sorted(set(ids or ()) - {e["id"] for e in entries})
     if ids is not None:
         entries = [e for e in entries if e["id"] in ids]
@@ -743,7 +761,7 @@ def apply(root: Path, ids=None, now=None, rules=None, cli=None) -> dict:
     out = []
     for e in entries:
         what, detail = results[e["id"]]
-        row = {"id": e["id"], "where": e["where"], "title": e["title"], "note": e["note"],
+        row = {"id": e["id"], "where": e["where"], "name": e["name"], "note": e["note"],
                "result": what}
         if detail:
             row["detail"] = detail

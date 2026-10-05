@@ -37,17 +37,17 @@ allowed-tools: Edit(.daily-note/run/**)
 Single, one task: one line. Made-up examples:
 
 ```
-Created [[Ask Julie for pilot dates]] and linked it in the task.
-Linked the task to the existing note [[Prep the release plan]].
-This task has a note already: [[Review the mockups]].
+Created [[26-10-05 - Ask Julie for pilot dates]] and linked it in the task.
+Linked the task to the existing note [[26-10-05 - Prep the release plan]].
+This task has a note already: [[26-10-02 - Review the mockups]].
 ```
 
-Batch: one line per result, at most 8 lines, then the backup. Made-up example:
+Batch: one line per result, by its `name`, at most 8 lines, then the backup. Made-up example:
 
 ```
-- Ask Julie for pilot dates: created
-- Prep the release plan: linked to the existing note
-- Review the mockups: had a note, #note removed
+- 26-10-05 - Ask Julie for pilot dates: created
+- 26-10-05 - Prep the release plan: linked to the existing note
+- 26-10-02 - Review the mockups: had a note, #note removed
 Backup: .daily-note/backups/2026-10-05_173012_2026-10-05.md
 ```
 
