@@ -1,6 +1,6 @@
 {
   "name": "po-claude-toolkit",
-  "version": "0.10.0",
+  "version": "0.11.0",
   "description": "Product Owner toolkit for Obsidian + Claude Code: git-like sync between an Obsidian vault and Confluence, plus creation of pages, folders and whole project trees, with Jira links, PlantUML and user mentions support. Also morning and evening routines for the daily note: the morning one builds it from the calendar, tasks, Gmail and Jira, the evening one completes it with meeting recaps, project tags, corrections and an End of day recap.",
   "owner": {
     "name": "Antoine Sifoni"
@@ -23,7 +23,7 @@
     },
     {
       "name": "daily-note",
-      "description": "Morning and evening routines for an Obsidian vault: /daily-note:start-my-day builds today's daily note with a Summary paragraph, an Alert list and one heading per meeting. /daily-note:end-my-day adds missing meetings, Gemini transcript links with a short recap, project tags, text-corrector fixes, an End of day paragraph and a Review list. meeting-recap recaps one meeting on request.",
+      "description": "Morning and evening routines for an Obsidian vault: /daily-note:start-my-day builds today's daily note with a Summary paragraph, an Alert list and one heading per meeting. /daily-note:end-my-day adds task notes for the tasks marked #note, missing meetings, Gemini transcript links with a short recap, project tags, text-corrector fixes, an End of day paragraph and a Review list. meeting-recap recaps one meeting on request. task-note gives a task a note to write in, linked in the task line.",
       "source": "./plugins/daily-note",
       "category": "productivity",
       "keywords": [

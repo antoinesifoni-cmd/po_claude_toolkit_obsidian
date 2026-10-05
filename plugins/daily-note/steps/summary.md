@@ -9,7 +9,7 @@ Gather these in order. If one fails, remember it and move on.
 1. **Meetings:** `meetings.json` in the Run folder.
 2. **Tasks:** one Grep call from the vault root, with
    - pattern `- \[[ /]\] .*📅\s*\d{4}-\d{2}-\d{2}`
-   - glob `!{.*/**,Tools/Templates/**}`
+   - glob `!{.*/**,**/Templates/**}`
    - `output_mode: "content"` and `head_limit: 0`
 
    A 📅 date equal to `date` is due today. An earlier one is overdue. Ignore later ones. A `#PT-xxxx` tag on the line names the project.

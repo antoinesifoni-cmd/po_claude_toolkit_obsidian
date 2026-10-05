@@ -1,7 +1,7 @@
 # daily-note
 
-A morning and an evening routine for an Obsidian vault, driven by Claude Code, plus one
-skill to recap a single meeting.
+A morning and an evening routine for an Obsidian vault, driven by Claude Code, plus two
+skills on request: one recaps a single meeting, one gives a task a note to write in.
 
 ```
 /daily-note:start-my-day
@@ -9,8 +9,9 @@ skill to recap a single meeting.
 ```
 
 The two routines run only when you type them. Claude never starts them on its own,
-because they write to a vault that has no undo. `meeting-recap` is the exception: say
-"fetch resume of this meet" and it runs, since asking is the whole point.
+because they write to a vault that has no undo. `meeting-recap` and `task-note` are the
+exceptions: say "fetch resume of this meet" or "make a note for this task" and they run,
+since asking is the whole point.
 
 ## What lands in the note
 
@@ -26,6 +27,8 @@ because they write to a vault that has no undo. `meeting-recap` is the exception
 
 **end-my-day**, in the evening, completes the note, then opens it and unpins its tab:
 
+- **Task notes:** first, the tasks marked `#note` anywhere in the vault get their note,
+  after your yes to the list. See task-note below.
 - **Missing meetings:** a heading for each meeting of today that the note has no section
   for, in time order. A heading you renamed still counts, when its time line is the same.
 - **Recaps:** under each meeting that Google recorded, a one or two sentence recap and a
@@ -44,6 +47,25 @@ because they write to a vault that has no undo. `meeting-recap` is the exception
 **meeting-recap** does the recap part for one meeting, any time: "fetch resume of this
 meet", "get the recap of the sprint review". With no meeting named, it takes the one
 that ended last.
+
+**task-note** gives a task a note to write in, only when you want one. The task stays a
+Tasks plugin task: checkbox, dates, Today and Overdue, nothing changes there.
+
+- Select a task line, or put the cursor on it, and say "make a note for this task".
+  Or put `#note` in tasks anywhere, and say "make the task notes", or let end-my-day
+  pick them up. Several tasks are always listed first, and nothing happens before your yes.
+- The note is created in `Day2Day notes/00-Task Note/` from your `Task Note` template,
+  through the Obsidian CLI. Its properties: `tags` (`TaskNote` and the task's own tags)
+  and `source` (the note the task lives in). AutoDater adds `Created`.
+- The task line gets `[[Title|📎]]` right before its Tasks fields, and `#note` goes away.
+  After the fields, the Tasks plugin would stop reading the dates.
+- The title is the task's text when it is 8 words or fewer, with no tag past its start.
+  Otherwise Claude writes a short one, shown to you first. Renaming the note later keeps
+  the link.
+- An existing note is linked, never written over. A task that has its note already only
+  loses `#note`. A note synced with Confluence is never changed.
+- The note holds no status and no date: they stay in the task line, so the two never
+  disagree. Your template can show the task live, see Setup.
 
 Each skill owns only its block and the lines it adds. Everything else in the note stays as
 it is. Before every write, the note is copied to `.daily-note/backups/`.
@@ -73,6 +95,32 @@ it is. Before every write, the note is copied to `.daily-note/backups/`.
 4. Have a `text-corrector` skill, for the corrections. Without it, that step is skipped.
 5. Install the Advanced URI community plugin in Obsidian.
 6. Start Claude Code in the vault root, the folder that holds `.obsidian/`.
+7. For task-note:
+   - Turn on the Obsidian CLI, and keep Obsidian open: it creates the notes.
+   - Point Settings, Templates, Template folder location to your templates folder, or the
+     CLI finds no template.
+   - Create the `Task Note` template there. Starter:
+
+     ````
+     ---
+     tags:
+       - TaskNote
+     ---
+
+     ```tasks
+     description includes {{query.file.filenameWithoutExtension}}|📎]]
+     ```
+
+     ## Notes
+     ````
+
+     The query shows the task whose link names this note, live, with its checkbox and
+     dates. It needs no JavaScript, which Tasks now blocks in queries by default, so no
+     `filter by function`. If you change the icon in the rule's `link`, change it here too.
+   - With AutoDater: give the template no `Created` line, not even an empty one, and add
+     the templates folder to AutoDater's Excluded folders. Otherwise every task note copies
+     the template's own date.
+   - Create the `Day2Day notes/00-Task Note` folder.
 
 ## Steps
 
@@ -82,6 +130,7 @@ prompt file in `steps/`, readable on its own, and a step can serve more than one
 | Step | Used by | Reads | Writes to `.daily-note/run/` |
 |---|---|---|---|
 | start (`daynote.py today`) | all | Obsidian's daily notes settings | nothing, it empties the folder |
+| `task-note` | end, task-note | the tasks marked `#note`, or the selected ones | `task-note.json`, `task-titles.json` |
 | `meetings` | all | Google Calendar | `meetings.json` |
 | `alert-confluence` | start | `confluence-sync:confluence-status` | `alert-confluence.md` |
 | `summary` | start | meetings, tasks, Gmail, Jira, project `CLAUDE.md` | `summary.md` |
@@ -95,8 +144,10 @@ prompt file in `steps/`, readable on its own, and a step can serve more than one
 | end (`daynote.py write`, `close`, `recap`) | start, end, recap | the run folder | the note |
 
 Claude gathers, the script writes. `scripts/daynote.py` is the only code that changes the
-note. `scripts/tests/test_write.py` covers the morning, `scripts/tests/test_close.py` the
-evening and the recap.
+daily note, and `scripts/tasknote.py` the only code that changes a task line or creates a
+task note, through the Obsidian CLI. `scripts/tests/test_write.py` covers the morning,
+`scripts/tests/test_close.py` the evening and the recap, `scripts/tests/test_tasknote.py`
+the task notes.
 
 ## Settings
 
@@ -109,9 +160,25 @@ evening and the recap.
 | `summary.language`, `summary.style` | how the morning paragraph is written |
 | `recap.language`, `recap.style` | how a meeting recap is written |
 | `wrapup.language`, `wrapup.style` | how the End of day paragraph is written |
+| `task_note.rules` | how a task gets its note, read by `tasknote.py` itself |
 
 The daily notes folder, template and vault name come from Obsidian's own settings, so they
 are not repeated here.
+
+A task note rule, as shipped:
+
+- `keyword`: the tag that asks for a note, `#note`. Any case.
+- `template` and `folder`: the template the note is made from, and where it goes.
+- `link`: what goes in the task line. `{title}` becomes the note's name, or its path when
+  another note has the same name.
+- `title_words`: a task text this short is the title as is, unless a tag sits inside it.
+  Otherwise Claude writes one.
+- `properties`: set on the new note. `{tags}` stands for the task's tags, `{source}` for
+  the note the task lives in, `{title}` for the title. An empty value is not set.
+
+The first rule whose keyword is in the line wins. A task picked by selection with no
+keyword uses the first rule. Another keyword can send its tasks to another template and
+folder: add a rule.
 
 The file ships with the plugin, so a change is a release: edit it here, bump the version,
 merge, then `claude plugin marketplace update po-claude-toolkit` and
@@ -142,3 +209,7 @@ python3 -m unittest discover -s plugins/daily-note/scripts/tests -t plugins/dail
 
 Try an unmerged branch from the vault root with
 `claude --plugin-dir <repo>/plugins/daily-note`.
+
+To call the Obsidian CLI by hand from Git Bash, use `Obsidian.com`: plain `obsidian`
+fails without a word on commands with a colon, like `property:set`. `tasknote.py` works
+from any shell.
