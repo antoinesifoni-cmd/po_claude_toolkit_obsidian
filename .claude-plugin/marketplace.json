@@ -1,6 +1,6 @@
 {
   "name": "po-claude-toolkit",
-  "version": "0.11.0",
+  "version": "0.12.0",
   "description": "Product Owner toolkit for Obsidian + Claude Code: git-like sync between an Obsidian vault and Confluence, plus creation of pages, folders and whole project trees, with Jira links, PlantUML and user mentions support. Also morning and evening routines for the daily note: the morning one builds it from the calendar, tasks, Gmail and Jira, the evening one completes it with meeting recaps, project tags, corrections and an End of day recap.",
   "owner": {
     "name": "Antoine Sifoni"

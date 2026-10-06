@@ -88,9 +88,7 @@ def expand_tree(nodes, variables: dict, team=None):
     `when: single_team` / `when: multi_team` drops a node (and its whole subtree) in the
     other mode. It exists because collapsing splices into the *immediate* parent, so a
     node that needs to sit at a different depth once the team wrapper disappears cannot
-    be expressed by placement alone - it has to be written twice and gated. project.yaml
-    uses it for the Dev folder: per-team inside "Product Owner" for a multi-team project,
-    a single project-level folder otherwise.
+    be expressed by placement alone - it has to be written twice and gated.
     """
     out = []
     for node in nodes or []:
