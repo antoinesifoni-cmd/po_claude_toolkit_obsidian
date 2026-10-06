@@ -30,5 +30,21 @@
       "What got done first, then what the meetings decided, then what carries over to tomorrow",
       "Name projects by PT id, without the #"
     ]
+  },
+  "task_note": {
+    "rules": [
+      {
+        "keyword": "#note",
+        "template": "Task Note",
+        "folder": "Day2Day notes/00-Task Note",
+        "link": "[[{title}|📎]]",
+        "name": "{YY}-{MM}-{DD} - {title}",
+        "title_words": 8,
+        "properties": {
+          "tags": ["TaskNote", "{tags}"],
+          "source": "[[{source}]]"
+        }
+      }
+    ]
   }
 }

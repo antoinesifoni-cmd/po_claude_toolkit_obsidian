@@ -1,7 +1,7 @@
 {
   "name": "daily-note",
-  "version": "0.3.0",
-  "description": "Morning and evening routines for an Obsidian vault. /daily-note:start-my-day builds today's daily note with a Summary paragraph, an Alert list and one heading per meeting. /daily-note:end-my-day completes it: missing meetings, transcript links with a short recap from the Gemini notes, project tags, text-corrector fixes, an End of day paragraph and a Review list of loose ends and stale CLAUDE.md files. meeting-recap does the recap for one meeting on request. Steps are small prompt files run in a fixed order. One script does every write to the note, with a backup first.",
+  "version": "0.4.0",
+  "description": "Morning and evening routines for an Obsidian vault. /daily-note:start-my-day builds today's daily note with a Summary paragraph, an Alert list and one heading per meeting. /daily-note:end-my-day completes it: task notes for the tasks marked #note, missing meetings, transcript links with a short recap from the Gemini notes, project tags, text-corrector fixes, an End of day paragraph and a Review list of loose ends and stale CLAUDE.md files. meeting-recap does the recap for one meeting on request. task-note gives a Tasks plugin task a note to write in, created from a template through the Obsidian CLI and linked in the task line, which otherwise stays as it is. Steps are small prompt files run in a fixed order. Scripts do every write to a note, with a backup first.",
   "author": {
     "name": "Antoine Sifoni"
   },

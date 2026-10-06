@@ -9,7 +9,7 @@ Gather these in order. If one fails, remember it and move on.
 1. **The note:** Read `note` from the vault root: what he wrote under each section. The Summary block, when there is one, is the morning plan. Use it only to compare, never as a fact of what was done.
 2. **Done today:** one Grep call from the vault root, with
    - pattern `- \[[xX-]\] .*(✅|❌) <date>`, where `<date>` is `date` from `today`
-   - glob `!{.*/**,Tools/Templates/**}`
+   - glob `!{.*/**,**/Templates/**}`
    - `output_mode: "content"` and `head_limit: 0`
 
    `✅` is done, `❌` is dropped. A `#PT-xxxx` tag on the line names the project.
