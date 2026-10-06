@@ -90,7 +90,8 @@ dry run instead of producing a half-empty title.
 **`when`.** `single_team` or `multi_team` drops a node and its subtree in the other mode.
 Needed because a collapsing wrapper splices into its *immediate* parent, so a node that
 belongs at a different depth once the wrapper disappears can't be expressed by placement
-alone - write it twice and gate each copy. `project.yaml` does this for `Dev`.
+alone - write it twice and gate each copy. `project.yaml` doesn't need it: everything
+per-team sits inside the team folder, so collapsing puts it at project level.
 
 **`target`.** `both` (default) creates in Confluence and the vault. `obsidian` creates a
 local note only - never pushed, never linked, absent from `mapping.json`. Use it for

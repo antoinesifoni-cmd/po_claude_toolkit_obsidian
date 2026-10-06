@@ -1,8 +1,9 @@
 # Medfar project scaffold.
 #
 # Run with:
-#   conf.py scaffold templates/project.yaml --set key=PT-1947 \
-#       --set name="CNESST, Obstetrical Files" --set parent=1154842646 --dry-run
+#   conf.py scaffold templates/project.yaml --set key=PT-534 \
+#       --set "name=MYLE Physician Mobile App" --set "teams=Mobile,Charting" \
+#       --parent 1154842646 --dry-run
 #
 # Titles render as "{key} - {title}", or "{key} - {team} - {title}" inside a team
 # subtree (Confluence enforces unique page titles per space, so two teams sharing a
@@ -11,23 +12,18 @@
 # Bodies are headings only, no tables - they are read in Obsidian far more often than
 # in Confluence, and markdown tables render poorly there. Customise per page later.
 #
-# Dev sits at a different depth depending on team count, so it is written twice and
-# gated with `when:`. Single team -> one "{key} - Dev" folder at project level, a sibling
-# of "Product Owner". Multiple teams -> one Dev per team, inside that team's folder under
-# "Product Owner", alongside its PO Conception. Placement alone cannot express this: the
-# repeat_per_team wrapper collapses into its immediate parent, so anything left inside it
-# would land in "Product Owner" in single-team mode.
+# Each team gets a "{team}" folder holding Conception (Meeting Notes + PO Conception)
+# and Dev. With a single team that wrapper collapses into the project folder, so
+# Conception and Dev sit directly under the project - no `when:` gating needed.
 
 variables:
-  key: ""                      # required, e.g. PT-1947
-  name: ""                     # required, e.g. "CNESST, Obstetrical Files"
-  teams: []                    # [] = single team. ["Charting","L&D Rx"] = per-team split
+  key: ""                      # required, e.g. PT-534
+  name: ""                     # required, e.g. "MYLE Physician Mobile App"
+  teams: []                    # [] = single team. ["Mobile","Charting"] = per-team split
 
-parent: ""                     # Confluence page or folder id. --parent overrides
-base: "Confluence Projects"    # vault-relative directory the project is created under
+parent: ""
+base: "Confluence Projects"
 
-# Merged into every created note as manual frontmatter (outside the confsync-owned keys,
-# so every later pull/push preserves it).
 frontmatter:
   tags: ["{key}"]
 
@@ -38,7 +34,7 @@ tree:
 
       - type: page
         title: "Read Me"
-        anchor: true            # every other note's frontmatter `up` points here
+        anchor: true
         body: |
           ## Context
 
@@ -46,12 +42,14 @@ tree:
 
           ## Scope
 
+          ## Teams
+
           ## References
 
       - type: page
         title: "CLAUDE.md"
-        raw: true               # exact filename - Claude Code looks for this name
-        target: obsidian        # never created in Confluence
+        raw: true
+        target: obsidian
         body: |
           # {key} - {name}
 
@@ -71,101 +69,96 @@ tree:
             run `conf.py status` before editing to check nothing moved upstream
 
       - type: folder
-        title: "Product Owner"
+        title: "{team}"
+        repeat_per_team: true
         children:
 
           - type: folder
-            title: "General information"
-            children:
-              - type: page
-                title: "User Interviews"
-                body: |
-                  ## Participants
-
-                  ## Findings
-
-                  ## Verbatims
-              - type: page
-                title: "Competitors analysis"
-                body: |
-                  ## Competitors reviewed
-
-                  ## Findings
-
-                  ## Implications for us
-              - type: page
-                title: "Product current state"
-                body: |
-                  ## Current behaviour
-
-                  ## Known limitations
-
-          - type: folder
-            title: "{team}"
-            repeat_per_team: true
+            title: "Conception"
             children:
 
               - type: folder
-                title: "PO Conception"
+                title: "Meeting Notes"
                 children:
                   - type: page
-                    title: "Scope definition"
+                    title: "Scope Review"
                     body: |
+                      ## Attendees
+
                       ## In scope
 
                       ## Out of scope
 
-                      ## Open questions
+                      ## Decisions
+
+                      ## Action items
                   - type: page
                     title: "Product Preliminary Review"
                     body: |
+                      ## Attendees
+
                       ## Summary
 
                       ## Risks and assumptions
 
                       ## Decisions
 
-                      ## Open questions
+                      ## Action items
                   - type: page
                     title: "Product Internal Review"
                     body: |
+                      ## Attendees
+
                       ## Summary
 
                       ## Feedback
 
                       ## Decisions
 
-                      ## Open questions
+                      ## Action items
                   - type: page
                     title: "Product Detail Review"
                     body: |
-                      ## Summary
+                      ## Attendees
 
                       ## Detailed behaviour
 
                       ## Edge cases
 
                       ## Decisions
+
+                      ## Action items
                   - type: page
                     title: "Handoff"
                     body: |
+                      ## Attendees
+
                       ## Scope recap
 
-                      ## Acceptance criteria
+                      ## User Stories
 
                       ## Open questions
 
-              # Multi-team only: each team gets its own Dev folder next to its
-              # conception work. Single-team projects get one project-level Dev instead
-              # (below) - the team wrapper collapses into "Product Owner", and Dev is
-              # meant to sit outside it.
-              - type: folder
-                title: "Dev"
-                when: multi_team
+                      ## Action items
 
-      - type: folder
-        title: "Dev"
-        when: single_team
+              - type: folder
+                title: "PO Conception"
+                children:
+                  - type: page
+                    title: "Analysis"
+                    body: |
+                      ## Problem
+
+                      ## Who is affected
+
+                      ## Current workaround
+
+                      ## Hypotheses
+
+                      ## Open questions
+
+          - type: folder
+            title: "Dev"
 
       - type: page
         title: "Release plan"
