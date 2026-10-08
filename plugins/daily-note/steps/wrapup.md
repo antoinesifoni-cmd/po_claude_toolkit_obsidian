@@ -15,6 +15,7 @@ Gather these in order. If one fails, remember it and move on.
    `✅` is done, `❌` is dropped. A `#PT-xxxx` tag on the line names the project.
 3. **Still open:** one Grep call, same glob, with pattern `- \[[ /]\] .*📅\s*<date>`. These tasks were due today and are not done.
 4. **Meetings:** `meetings.json` and `recaps.json` in the Run folder.
+5. **Notes:** `notes.json` and `note-recaps.json` in the Run folder: the notes created or edited today.
 
 ## Rules
 
