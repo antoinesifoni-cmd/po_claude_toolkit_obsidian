@@ -33,6 +33,12 @@ since asking is the whole point.
   for, in time order. A heading you renamed still counts, when its time line is the same.
 - **Recaps:** under each meeting that Google recorded, a one or two sentence recap and a
   link to the transcript, from the Gemini notes attached to the calendar event.
+- **Notes of the day:** each note you created or edited today, as its own section among
+  the meetings, in time order: the title, its `#PT-xxxx` tag, `*created 10:15*` or
+  `*edited 14:05*`, a one sentence recap and the link to the note. A note made and changed
+  the same day shows once, at its creation time. The times come from the `Created` and
+  `Updated` properties AutoDater keeps. Daily notes, AutoDater's excluded folders and notes
+  already linked in today's note are left out.
 - **Project tags:** a `#PT-xxxx` tag on each section clearly about one project that has
   none. An unsure case is flagged instead.
 - **Corrections:** your `text-corrector` skill fixes the lines you wrote. The script
@@ -97,6 +103,10 @@ it is. Before every write, the note is copied to `.daily-note/backups/`.
 4. Have a `text-corrector` skill, for the corrections. Without it, that step is skipped.
 5. Install the Advanced URI community plugin in Obsidian.
 6. Start Claude Code in the vault root, the folder that holds `.obsidian/`.
+7. For the notes of the day, keep the AutoDater community plugin, and set its date format
+   to one with the time, like ISO 8601. Obsidian can keep showing the date only. With a
+   date-only format, the time comes from the file itself, and is missing when the file
+   does not agree on the day.
 7. For task-note:
    - Turn on the Obsidian CLI, and keep Obsidian open: it creates the notes.
    - Point Settings, Templates, Template folder location to your templates folder, or the
@@ -138,6 +148,7 @@ prompt file in `steps/`, readable on its own, and a step can serve more than one
 | `summary` | start | meetings, tasks, Gmail, Jira, project `CLAUDE.md` | `summary.md` |
 | `daynote.py prose` | end | the note | `prose.json` |
 | `recap` | end, recap | Gemini notes in Google Drive | `recaps.json` |
+| `notes` (runs `daynote.py notes`) | end | `Created` and `Updated` properties, the notes themselves | `notes.json`, `note-recaps.json` |
 | `tags` | end | the note, project folders, vault `CLAUDE.md` | `tags.json`, `review-tags.md` |
 | `review-loose-ends` | end | the note, recaps | `review-loose-ends.md` |
 | `review-claude-md` | end | the note, recaps, `CLAUDE.md` files | `review-claude-md.md` |
@@ -148,7 +159,8 @@ prompt file in `steps/`, readable on its own, and a step can serve more than one
 Claude gathers, the script writes. `scripts/daynote.py` is the only code that changes the
 daily note, and `scripts/tasknote.py` the only code that changes a task line or creates a
 task note, through the Obsidian CLI. `scripts/tests/test_write.py` covers the morning,
-`scripts/tests/test_close.py` the evening and the recap, `scripts/tests/test_tasknote.py`
+`scripts/tests/test_close.py` the evening and the recap, `scripts/tests/test_notes.py` the
+notes of the day, `scripts/tests/test_tasknote.py`
 the task notes.
 
 ## Settings

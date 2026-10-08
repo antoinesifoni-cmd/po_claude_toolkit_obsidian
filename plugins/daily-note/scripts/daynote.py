@@ -17,6 +17,8 @@ Commands (run from the vault root, the folder that holds .obsidian/):
           meetings, project tags, meeting recaps, the End of day block), back it up,
           write it once, then open it
   recap   meeting-recap: add one meeting's recap under its heading, back up, write once
+  notes   end-my-day: list the notes created or edited today to notes.json, from the
+          Created and Updated properties AutoDater keeps
 
 Why a script does every write: the vault has no git and no undo. Keeping the one piece of
 code that can damage a note small, in one place, and covered by tests is the safety net.
@@ -31,7 +33,9 @@ What close() and recap() own in the note:
   - the block between EOD_BEGIN and EOD_END (End of day and Review), rebuilt on every
     run, placed above the template's closing part (the "---" before "# Task")
   - the lines they add and never touch again: a heading for a meeting the note has no
-    section for, a "#PT-xxxx" tag, the "**Recap:**" and "**Transcript:**" lines
+    section for, a "#PT-xxxx" tag, the "**Recap:**" and "**Transcript:**" lines,
+    and one section per note created or edited today, with its "*created 09:01*" line
+    and its "**Note:**" link
   - text corrections, applied only to lines the user wrote, and only when every link,
     tag, date, time, emoji and list marker in the line stays exactly as it was
 Everything else in the note is left byte for byte.
@@ -45,12 +49,12 @@ id, never copied from outside text.
 
 State lives in <vault>/.daily-note/ (a dot folder, so Obsidian hides it):
   run/       meetings.json, alert-*.md, summary.md           written by Claude, emptied by `today`
-             prose.json (by this script), corrections.json, tags.json, recaps.json,
-             review-*.md, wrapup.md
+             prose.json and notes.json (by this script), corrections.json, tags.json,
+             recaps.json, note-recaps.json, review-*.md, wrapup.md
   backups/   <date>_<HHMMSS>.md                       the note as it was before each write
 
-The only settings this script needs come from Obsidian itself (.obsidian/daily-notes.json),
-so no value is stored twice. The skills' own settings (Gmail labels, Jira query, text
+The only settings this script needs come from Obsidian itself (.obsidian/daily-notes.json,
+and the AutoDater plugin's data.json for the property names), so no value is stored twice. The skills' own settings (Gmail labels, Jira query, text
 style) live in config.json and are read by Claude, never by this script.
 
 Standard library only. Dates come from datetime.now().astimezone(): zoneinfo has no time
@@ -132,8 +136,16 @@ HEADING = re.compile(r"^\s{0,3}#{1,6}\s")
 RULE = re.compile(r"^\s{0,3}([-*_])(?:\s*\1){2,}\s*$")
 UNDERLINE = re.compile(r"^\s{0,3}(?:=+|-+)\s*$")   # under a line of text, makes it a heading
 WORD = re.compile(r"[^\W\d_]{2,}")             # two letters in a row, in any language
-ADDED = ("**Recap:**", "**Transcript:**")      # lines the skills write under a meeting
+ADDED = ("**Recap:**", "**Transcript:**", "**Note:**")   # lines the skills write
 SAME_ENOUGH = 0.6                              # below this, a "fix" is a rewrite
+
+# Notes of the day.
+NOTE_TIME = re.compile(r"^[\s*_]*(?:created|edited)(?:\s+" + CLOCK + r")?[\s*_]*$")
+PROPERTY = re.compile(r"^([^\s:#-][^:]*):\s*(.*)$")
+ITEM = re.compile(r"^\s+-\s+(.*)$")
+LEAD_PT = re.compile(r"^(PT-\d+)(?![\w-])")                       # "PT-534 - Mobile" folder
+DATE_PREFIX = re.compile(r"^\d{2,4}-\d{2}-\d{2}\s*-\s*")           # "26-10-06 - " task notes
+NOT_IN_LINK = re.compile(r"[\[\]|#^]")                             # breaks a [[wikilink]]
 
 
 class Stop(Exception):
@@ -530,6 +542,31 @@ def time_range(line: str):
     return int(h1), int(m1 or m1h or 0), int(h2), int(m2 or m2h or 0)
 
 
+def note_time(line: str):
+    """The time of a "#PT-534 *created 09:01*" line as (h, m), (99, 99) when it has no
+    time, else None."""
+    m = NOTE_TIME.match(TAG.sub(" ", line))
+    if not m:
+        return None
+    h, mm, mh = m.groups()
+    return (int(h), int(mm or mh or 0)) if h else (99, 99)
+
+
+def section_start(lines: list, at: int, stop: int):
+    """When a section starts, (h, m): from a meeting's time range or a note's time line."""
+    for j in range(at + 1, stop):
+        s = lines[j].strip()
+        if not s:
+            continue
+        when = time_range(s)
+        if when:
+            return when[:2]
+        when = note_time(s)
+        if when or TAG.sub("", s).strip():
+            return when
+    return None
+
+
 def section_time(lines: list, at: int, stop: int):
     """The time range right under a heading, past blank lines and tag lines."""
     for j in range(at + 1, stop):
@@ -560,7 +597,8 @@ def sections(lines: list, skip: set, tail: int) -> list:
         stop = heads[k + 1][0] if k + 1 < len(heads) else tail
         stop = next((j for j in range(at + 1, stop) if j in skip), stop)
         out.append({"at": at, "stop": stop, "title": title,
-                    "time": section_time(lines, at, stop)})
+                    "time": section_time(lines, at, stop),
+                    "start": section_start(lines, at, stop)})
     return out
 
 
@@ -623,7 +661,7 @@ def own_lines(lines: list, note_name: str) -> list:
             continue
         s = line.strip()
         if (in_code or not s or HEADING.match(line) or RULE.match(line) or s.startswith("|")
-                or "%%" in s or s.startswith(ADDED) or time_range(s)):
+                or "%%" in s or s.startswith(ADDED) or time_range(s) or note_time(s)):
             continue
         if WORD.search(KEEP.sub(" ", line)):
             out.append(i)
@@ -678,12 +716,14 @@ def apply_corrections(lines: list, corrections, note_name: str):
     return lines, f"{applied} applied, {refused} refused, {skipped} skipped"
 
 
-def insert_section(lines: list, m: dict, note_name: str, tail_titles: set) -> list:
-    """Add a meeting heading in time order: before the first section that starts later,
-    else after the last section, else above the End of day block or the tail."""
+def insert_section(lines: list, m: dict, note_name: str, tail_titles: set,
+                   block: list = None) -> list:
+    """Add a meeting heading, or another block, in time order: before the first section
+    that starts later, else after the last section, else above the End of day block or
+    the tail."""
     skip, tail, secs = layout(lines, note_name, tail_titles)
     start = hhmm(m.get("start"))
-    later = [s for s in secs if start and s["time"] and s["time"][:2] > start]
+    later = [s for s in secs if start and s["start"] and s["start"] > start]
     if later:
         pos = later[0]["at"]
     elif secs:
@@ -691,7 +731,7 @@ def insert_section(lines: list, m: dict, note_name: str, tail_titles: set) -> li
     else:
         eod = find_block(lines, EOD_BEGIN, EOD_END, note_name, "end-my-day")
         pos = eod[0] if eod and eod[0] < tail else tail
-    new = meeting_block(m) + [""]
+    new = (block or meeting_block(m)) + [""]
     if pos > 0 and lines[pos - 1].strip():
         new = [""] + new
     return lines[:pos] + new + lines[pos:]
@@ -859,15 +899,167 @@ def close(root: Path, now: datetime = None) -> dict:
     lines, added = add_meetings(lines, meetings, rel, tail_titles)
     lines, tags = add_tags(lines, read_list(run / "tags.json", "tags"), reserved, rel, tail_titles)
     lines, recaps = add_recaps(lines, read_list(run / "recaps.json", "recaps"), reserved, rel, tail_titles)
+    lines, notes = add_notes(root, lines, read_list(run / "notes.json", "notes"),
+                             read_list(run / "note-recaps.json", "notes"), rel, tail_titles)
     lines, block_state = put_eod_block(lines, build_eod_block(run), rel, tail_titles)
 
     result = {"note": rel, "created": not d["exists"], "corrections": fixes,
-              "meetings": added, "tags": tags, "recaps": recaps, "block": block_state,
+              "meetings": added, "tags": tags, "recaps": recaps, "notes": notes,
+              "block": block_state,
               "backup": None}
     written, result["backup"] = save(root, d, lines)
     if not written:
         result["block"] = "unchanged"
     return result
+
+
+# ---------------------------------------------------------------- notes of the day
+
+def properties(text: str) -> dict:
+    """A note's top level properties: plain values as strings, lists as lists of strings.
+    Enough for dates and tags, not a YAML parser."""
+    lines = text.split("\n")
+    props, key = {}, None
+    for line in lines[1:max(frontmatter_end(lines) - 1, 0)]:
+        m = PROPERTY.match(line)
+        if m:
+            key, value = m.group(1).strip(), m.group(2).strip()
+            if value.startswith("[") and value.endswith("]") and not value.startswith("[["):
+                props[key] = [v.strip().strip("'\"") for v in value[1:-1].split(",") if v.strip()]
+            else:
+                props[key] = value.strip("'\"") if value else []
+            continue
+        item = ITEM.match(line)
+        if key and item and isinstance(props.get(key), list):
+            props[key].append(item.group(1).strip().strip("'\""))
+    return props
+
+
+def stamp(value, file_time: float):
+    """(local date, (h, m) or None) of a Created or Updated value, else None.
+
+    Reads "2026-10-08", "2026-10-08T09:01", "2026-10-08 09:01" and the UTC form AutoDater
+    wrote before it was set to local time, "2026-10-08T13:01:06.299Z". A value with no time
+    takes the file's own time, when the file agrees on the day."""
+    if not isinstance(value, str) or not value.strip():
+        return None
+    try:
+        when = datetime.fromisoformat(value.strip())
+    except ValueError:
+        return None
+    if when.tzinfo:
+        when = when.astimezone()
+    if len(value.strip()) > 10:
+        return when.date(), (when.hour, when.minute)
+    on_disk = datetime.fromtimestamp(file_time)
+    return when.date(), (on_disk.hour, on_disk.minute) if on_disk.date() == when.date() else None
+
+
+def autodater(root: Path):
+    """The property names and excluded folders set in AutoDater, or its defaults."""
+    f = root / ".obsidian" / "plugins" / "autodater" / "data.json"
+    try:
+        cfg = json.loads(read_text(f)) if f.exists() else {}
+    except ValueError:
+        cfg = {}
+    excluded = [str(x).strip("/") for x in cfg.get("excludedFolders") or [] if str(x).strip("/")]
+    return cfg.get("createdProperty") or "Created", cfg.get("updatedProperty") or "Updated", excluded
+
+
+def project_of(rel: str, tags) -> str:
+    """The note's project: a PT tag in its properties, else a folder or name that starts
+    with a PT id. None when there is neither."""
+    for t in tags if isinstance(tags, list) else [tags]:
+        t = str(t or "").lstrip("#")
+        if PT_ID.match(t):
+            return t
+    for part in rel.split("/"):
+        m = LEAD_PT.match(part)
+        if m:
+            return m.group(1)
+    return None
+
+
+def notes_cmd(root: Path, now: datetime = None) -> dict:
+    """List the notes created or edited today in notes.json. Created wins over edited, so
+    a note made and changed today shows once, at its creation time."""
+    now = now or datetime.now().astimezone()
+    vault_config(root)
+    day = now.date()
+    created_key, updated_key, excluded = autodater(root)
+    found = []
+    for p in root.rglob("*.md"):
+        rel = p.relative_to(root).as_posix()
+        if any(part.startswith(".") for part in rel.split("/")):
+            continue   # .daily-note, .trash, .obsidian
+        if any(rel.startswith(x + "/") for x in excluded) or DATE_NAME.match(p.stem):
+            continue   # templates, and the daily notes themselves
+        if NOT_IN_LINK.search(rel):
+            continue
+        try:
+            props = properties(split_eol(read_text(p))[0])
+            st = p.stat()
+        except (OSError, UnicodeDecodeError):
+            continue
+        made = stamp(props.get(created_key), getattr(st, "st_birthtime", st.st_ctime))
+        changed = stamp(props.get(updated_key), st.st_mtime)
+        if made and made[0] == day:
+            kind, hm = "created", made[1]
+        elif changed and changed[0] == day:
+            kind, hm = "edited", changed[1]
+        else:
+            continue
+        heading = LEAD_ID.sub("", DATE_PREFIX.sub("", p.stem)).strip() or p.stem
+        found.append({"path": rel, "name": p.stem, "heading": heading,
+                      "pt": project_of(rel, props.get("tags")), "kind": kind,
+                      "time": "%02d:%02d" % hm if hm else None})
+    found.sort(key=lambda n: (n["time"] or "99:99", n["path"]))
+    run = root / STATE_DIR / "run"
+    run.mkdir(parents=True, exist_ok=True)
+    with open(run / "notes.json", "w", encoding="utf-8", newline="") as f:
+        json.dump({"date": day.isoformat(), "notes": found}, f, ensure_ascii=False, indent=1)
+    return {"notes": len(found), "created": sum(n["kind"] == "created" for n in found),
+            "edited": sum(n["kind"] == "edited" for n in found)}
+
+
+def note_block(n: dict, recap_text: str) -> list:
+    """One note, shaped like a meeting: heading, then tag and time, then recap and link."""
+    meta = ["#" + n["pt"]] if PT_ID.match(str(n.get("pt") or "")) else []
+    meta.append(f"*{n['kind']} {n['time']}*" if hhmm(n.get("time")) else f"*{n['kind']}*")
+    out = ["# " + heading_text(str(n.get("heading") or n["name"])), " ".join(meta), ""]
+    if recap_text:
+        out.append(f"**Recap:** {recap_text}")
+    return out + [f"**Note:** [[{n['path'][:-3]}|{n['name']}]]"]
+
+
+def add_notes(root: Path, lines: list, notes, recaps, note_name: str, tail_titles: set):
+    """One section per note of the day, in time order among the meetings. A note already
+    linked in today's note, by an earlier run or by hand, is left out."""
+    if notes is None:
+        return lines, "not run"
+    texts = {str(r.get("path")): summary_line(str(r.get("recap") or "")) for r in recaps or []}
+    added = linked = refused = 0
+    for n in notes:
+        path, name = str(n.get("path") or ""), str(n.get("name") or "")
+        if (not path.endswith(".md") or NOT_IN_LINK.search(path) or ".." in path.split("/")
+                or name != path.rsplit("/", 1)[-1][:-3]
+                or n.get("kind") not in ("created", "edited") or not (root / path).is_file()):
+            refused += 1
+            continue
+        text = "\n".join(lines)
+        if any(f"[[{t}{end}" in text for t in (path[:-3], name) for end in ("]]", "|", "#")):
+            linked += 1
+            continue
+        start = n["time"] if hhmm(n.get("time")) else None
+        lines = insert_section(lines, {"start": start}, note_name, tail_titles,
+                               note_block(n, texts.get(path, "")))
+        added += 1
+    out = [f"added {added}"]
+    if linked:
+        out.append(f"{linked} already linked")
+    if refused:
+        out.append(f"{refused} refused")
+    return lines, ", ".join(out)
 
 
 # ---------------------------------------------------------------- meeting-recap
@@ -906,7 +1098,8 @@ def open_note(vault_name: str, rel: str):
         return False, uri
 
 
-COMMANDS = {"today": today_cmd, "write": write, "prose": prose, "close": close, "recap": recap}
+COMMANDS = {"today": today_cmd, "write": write, "prose": prose, "close": close, "recap": recap,
+            "notes": notes_cmd}
 
 
 def main():
