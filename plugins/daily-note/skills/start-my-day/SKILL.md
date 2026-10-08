@@ -2,7 +2,7 @@
 name: start-my-day
 description: >
   Morning routine for Antoine's Obsidian vault. Builds or updates today's daily note
-  (a Summary paragraph, an Alert list, one heading per meeting), then opens it in
+  (a short Summary, an Alert list, one heading per meeting), then opens it in
   Obsidian. Runs only when invoked by name.
 disable-model-invocation: true
 allowed-tools: Edit(.daily-note/run/**), mcp__claude_ai_Google_Calendar__list_events, mcp__claude_ai_Gmail__search_threads, mcp__claude_ai_Atlassian__searchJiraIssuesUsingJql

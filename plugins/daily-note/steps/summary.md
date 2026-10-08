@@ -1,6 +1,6 @@
 # Step: summary
 
-**Goal:** one paragraph that tells Antoine how his day looks.
+**Goal:** a few short bullets that tell Antoine how his day looks, readable in five seconds.
 
 ## Sources
 
@@ -30,16 +30,21 @@ Gather these in order. If one fails, remember it and move on.
 
 - Language and style: `summary.language` and `summary.style` in the Settings.
 - Only facts from the sources above. Name ticket keys (`MYLE-30166`) and project ids.
-- Plain sentences only. No list, heading, link, web address or code.
-- If a source failed, end with `(Not checked: Gmail.)`, naming each one that failed.
+- Every line is a `- ` bullet. No paragraph, heading, sub-bullet, link, web address or code.
+- If a source failed, add a last bullet `- Not checked: Gmail`, naming each one that failed.
 
 ## Output
 
-Write `summary.md` in the Run folder once it is complete. It holds the paragraph and nothing else.
+Write `summary.md` in the Run folder once it is complete. It holds the bullets and nothing else.
 
 Made-up example:
 
-> Busy morning with four meetings from 9:30 to 11:30, two of them on PT-2311 (the sprint review and the scheduling weekly sync), then a free afternoon. Three tasks are due today: send the pilot feedback summary to Julie Tremblay, review the consent form wording for PT-2402 and answer the CLN-482 question on the appointment filter. Two Jira action emails came in since yesterday, both on CLN tickets waiting for your answer. The afternoon is the best slot for the pilot summary and the PT-2402 review.
+```
+- Busy morning: 4 meetings 9:30–11:30, 2 on PT-2311; afternoon free
+- Due today: pilot feedback summary for Julie Tremblay, PT-2402 consent form review, CLN-482 answer
+- Waiting on you: 2 Jira action emails on CLN tickets
+- Best slot: afternoon, for the pilot summary and PT-2402
+```
 
 ## If it fails
 

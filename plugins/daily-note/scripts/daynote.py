@@ -278,6 +278,15 @@ def alert_lines(text: str) -> list:
     return out
 
 
+def summary_lines(text: str) -> list:
+    """The Summary or End of day as "- " bullets; text with no bullet at all stays one plain line."""
+    lines = alert_lines(text)
+    if lines:
+        return lines
+    line = summary_line(text)
+    return [line] if line else []
+
+
 def heading_text(text: str) -> str:
     text = clean(text)
     for token in ("[[", "]]", "#", "\r", "\n"):
@@ -317,13 +326,13 @@ def read_list(path: Path, key: str):
 # ---------------------------------------------------------------- building the note
 
 def build_block(run: Path) -> list:
-    summary = ""
+    summary = []
     if (run / "summary.md").exists():
-        summary = summary_line(read_text(run / "summary.md"))
+        summary = summary_lines(read_text(run / "summary.md"))
     alerts = []
     for f in sorted(run.glob("alert-*.md")):
         alerts += alert_lines(read_text(f))
-    return [BEGIN, "", "# Summary", "", summary or NO_SUMMARY, "",
+    return [BEGIN, "", "# Summary", "", *(summary or [NO_SUMMARY]), "",
             "## Alert", "", *(alerts or [NO_ALERTS]), "", END]
 
 
@@ -796,9 +805,9 @@ def add_recaps(lines: list, recaps, reserved: set, note_name: str, tail_titles: 
 
 
 def build_eod_block(run: Path) -> list:
-    wrapup = ""
+    wrapup = []
     if (run / "wrapup.md").exists():
-        wrapup = summary_line(read_text(run / "wrapup.md"))
+        wrapup = summary_lines(read_text(run / "wrapup.md"))
     # A review step that found nothing leaves its file empty, so "nothing" is said once.
     files = sorted(run.glob("review-*.md"))
     review = []
@@ -806,7 +815,7 @@ def build_eod_block(run: Path) -> list:
         review += alert_lines(read_text(f))
     if not review:
         review = [NOTHING_TO_FLAG if files else NO_REVIEW]
-    return [EOD_BEGIN, "", "# End of day", "", wrapup or NO_WRAPUP, "",
+    return [EOD_BEGIN, "", "# End of day", "", *(wrapup or [NO_WRAPUP]), "",
             "## Review", "", *review, "", EOD_END]
 
 

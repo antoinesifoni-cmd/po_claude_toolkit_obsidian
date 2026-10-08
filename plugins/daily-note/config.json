@@ -9,8 +9,9 @@
   "summary": {
     "language": "English",
     "style": [
-      "One paragraph, 4 to 6 sentences",
-      "Shape of the day first, then what is due, then what waits on me",
+      "3 to 5 bullets, one line each, 15 words at most per bullet",
+      "Telegraphic: no full sentences, no filler",
+      "Order: shape of the day, what is due, what waits on me, best slot for focus work",
       "Name projects by PT id, without the #"
     ]
   },
@@ -26,8 +27,9 @@
   "wrapup": {
     "language": "English",
     "style": [
-      "One paragraph, 4 to 6 sentences",
-      "What got done first, then what the meetings decided, then what carries over to tomorrow",
+      "3 to 5 bullets, one line each, 15 words at most per bullet",
+      "Telegraphic: no full sentences, no filler",
+      "Order: what got done, what the meetings decided, what carries over to tomorrow",
       "Name projects by PT id, without the #"
     ]
   },

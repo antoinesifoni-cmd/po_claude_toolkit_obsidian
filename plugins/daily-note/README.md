@@ -17,7 +17,7 @@ since asking is the whole point.
 
 **start-my-day**, in the morning, builds or updates today's note, then opens it in a pinned tab:
 
-- **Summary:** one paragraph on how the day looks, built from your meetings, tasks due or
+- **Summary:** 3 to 5 short bullets on how the day looks, built from your meetings, tasks due or
   overdue, the Gmail Jira labels, your open Jira issues and each project's `CLAUDE.md`.
 - **Alert:** the linked Confluence pages that someone changed on Confluence, from
   `confluence-sync`.
@@ -38,7 +38,7 @@ since asking is the whole point.
 - **Corrections:** your `text-corrector` skill fixes the lines you wrote. The script
   refuses any fix that would touch a link, tag, date, time, emoji or list marker.
   Headings are never changed.
-- **End of day:** one paragraph on what the day achieved, from the note and the tasks
+- **End of day:** 3 to 5 short bullets on what the day achieved, from the note and the tasks
   you closed today, above the Task section.
 - **Review:** loose ends (open tasks with no due date, your Gemini action items that are
   not tasks yet, meetings with nothing written) and the `CLAUDE.md` files today made out
@@ -159,9 +159,9 @@ the task notes.
 |---|---|
 | `gmail.labels` | Gmail labels the Summary reads, by name |
 | `jira.site`, `jira.jql` | the Jira site and the query for your open issues |
-| `summary.language`, `summary.style` | how the morning paragraph is written |
+| `summary.language`, `summary.style` | how the morning bullets are written |
 | `recap.language`, `recap.style` | how a meeting recap is written |
-| `wrapup.language`, `wrapup.style` | how the End of day paragraph is written |
+| `wrapup.language`, `wrapup.style` | how the End of day bullets are written |
 | `task_note.rules` | how a task gets its note, read by `tasknote.py` itself |
 
 The daily notes folder, template and vault name come from Obsidian's own settings, so they

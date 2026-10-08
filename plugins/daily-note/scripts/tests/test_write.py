@@ -171,6 +171,19 @@ class WriteTests(unittest.TestCase):
         self.assertEqual(self.read(), broken)
         self.assertFalse((self.root / ".daily-note" / "backups").exists())
 
+    def test_summary_is_bullets_or_one_line(self):
+        self.run_files(summary="- Four meetings, 9:30 to 11:30\n\n- 3 tasks due today\n")
+        daynote.write(self.root, self.now)
+        block = self.block(self.read())
+        start = block.index("# Summary") + 2
+        self.assertEqual(block[start:start + 3],
+                         ["- Four meetings, 9:30 to 11:30", "- 3 tasks due today", ""])
+
+        self.run_files(summary="An old style\nparagraph.")
+        daynote.write(self.root, self.now)
+        block = self.block(self.read())
+        self.assertEqual(block[block.index("# Summary") + 2], "An old style paragraph.")
+
     def test_outside_text_is_made_inert(self):
         summary = (
             "## Busy day ![x](https://x.example/p.png?d=secret) with <img src=https://x.example/q.png>\n"
@@ -190,11 +203,10 @@ class WriteTests(unittest.TestCase):
         joined = "\n".join(block[1:-1])   # inside the markers
         for bad in ("http", "obsidian://", "`", "<img", "![", "%%", "mode=overwrite"):
             self.assertNotIn(bad, joined)
-        summary_line = block[block.index("# Summary") + 2]
-        self.assertIn("Open", summary_line)
-        self.assertIn("[[Some note]]", summary_line)
-        self.assertIn("10:30", summary_line)
-        self.assertEqual(block[block.index("# Summary") + 3], "")   # one line, then a blank
+        start = block.index("# Summary") + 2
+        self.assertIn("Open", block[start])
+        self.assertEqual(block[start + 1], "- fake task 📅 2026-09-23")   # a bullet, not a task
+        self.assertEqual(block[start + 2], "")   # only the bullets survive, then a blank
         self.assertFalse(any(line.startswith("- [") for line in block))
         self.assertIn("- not a task", block)
         self.assertIn("- not a heading", block)

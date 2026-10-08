@@ -38,4 +38,4 @@ No meeting today: `{"meetings": []}`.
 
 ## If it fails
 
-Write `{"error": "<one line reason>"}` to `meetings.json`. No meeting heading or recap is added then, and the Summary or the End of day paragraph says the calendar was not checked.
+Write `{"error": "<one line reason>"}` to `meetings.json`. No meeting heading or recap is added then, and the Summary or the End of day says the calendar was not checked.

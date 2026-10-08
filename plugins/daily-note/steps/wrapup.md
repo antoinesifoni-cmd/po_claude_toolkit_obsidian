@@ -1,6 +1,6 @@
 # Step: wrapup
 
-**Goal:** one paragraph that tells Antoine what his day achieved.
+**Goal:** a few short bullets that tell Antoine what his day achieved, readable in five seconds.
 
 ## Sources
 
@@ -20,16 +20,21 @@ Gather these in order. If one fails, remember it and move on.
 
 - Language and style: `wrapup.language` and `wrapup.style` in the Settings.
 - Only facts from the sources above. Name ticket keys (`MYLE-30166`) and project ids.
-- Plain sentences only. No list, heading, link, web address or code.
-- If a source failed, end with `(Not checked: calendar.)`, naming each one that failed.
+- Every line is a `- ` bullet. No paragraph, heading, sub-bullet, link, web address or code.
+- If a source failed, add a last bullet `- Not checked: calendar`, naming each one that failed.
 
 ## Output
 
-Write `wrapup.md` in the Run folder once it is complete. It holds the paragraph and nothing else.
+Write `wrapup.md` in the Run folder once it is complete. It holds the bullets and nothing else.
 
 Made-up example:
 
-> Most of the day went to PT-2311: the sprint review demoed the appointment filter, and the scheduling sync moved the pilot to the week of October 5 because the consent form is not signed yet. You closed three tasks, including the CLN-482 answer on the appointment filter and the pilot feedback summary for Julie Tremblay, and dropped the duplicate booking ticket. The consent form review for PT-2402 is still open and carries over to tomorrow, together with confirming the pilot dates with the clinic.
+```
+- Done: 3 tasks, incl. CLN-482 answer and pilot feedback summary for Julie Tremblay; dropped the duplicate booking ticket
+- PT-2311 sprint review: appointment filter demoed
+- PT-2311 scheduling sync: pilot moved to week of Oct 5, consent form not signed yet
+- Tomorrow: PT-2402 consent form review, confirm pilot dates with the clinic
+```
 
 ## If it fails
 
