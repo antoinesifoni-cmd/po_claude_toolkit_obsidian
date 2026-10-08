@@ -4,7 +4,7 @@ description: >
   End-of-day routine for Antoine's Obsidian vault. Gives a note to each task marked #note,
   after his yes. Completes today's daily note (missing meetings, project tags, transcript
   links with a short recap), corrects his writing with text-corrector, adds an End of day
-  paragraph and a Review list, then opens the note. Runs only when invoked by name.
+  summary and a Review list, then opens the note. Runs only when invoked by name.
 disable-model-invocation: true
 allowed-tools: Edit(.daily-note/run/**), mcp__claude_ai_Google_Calendar__list_events, mcp__claude_ai_Google_Drive__get_file_metadata, mcp__claude_ai_Google_Drive__read_file_content
 ---

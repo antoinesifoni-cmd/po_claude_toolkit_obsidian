@@ -23,7 +23,7 @@
     },
     {
       "name": "daily-note",
-      "description": "Morning and evening routines for an Obsidian vault: /daily-note:start-my-day builds today's daily note with a Summary paragraph, an Alert list and one heading per meeting. /daily-note:end-my-day adds task notes for the tasks marked #note, missing meetings, Gemini transcript links with a short recap, project tags, text-corrector fixes, an End of day paragraph and a Review list. meeting-recap recaps one meeting on request. task-note gives a task a note to write in, linked in the task line.",
+      "description": "Morning and evening routines for an Obsidian vault: /daily-note:start-my-day builds today's daily note with a short Summary, an Alert list and one heading per meeting. /daily-note:end-my-day adds task notes for the tasks marked #note, missing meetings, Gemini transcript links with a short recap, project tags, text-corrector fixes, a short End of day and a Review list. meeting-recap recaps one meeting on request. task-note gives a task a note to write in, linked in the task line.",
       "source": "./plugins/daily-note",
       "category": "productivity",
       "keywords": [
