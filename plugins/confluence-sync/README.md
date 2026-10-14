@@ -17,7 +17,7 @@ company wiki.
 |---|---|---|
 | `confluence-status` | none — read only | "sync", "what's the status", "is this up to date", "what changed", "did anyone edit it" |
 | `confluence-link` | low, reversible | "link this to that page", a pasted Confluence URL, "find the page called X", "create a page for this note" |
-| `confluence-pull` | overwrites **your** work | "pull", "fetch the latest", "refresh everything", "get the current version" |
+| `confluence-pull` | overwrites **your** work only with `--force`, which it asks for first | "pull", "fetch the latest", "refresh everything", "get the current version" |
 | `confluence-push` | publishes, notifies people | "push", "publish this", "send it to Confluence", "update the wiki page" |
 
 **"Sync" goes to `status`.** It's the one ambiguous word, and checking state is the correct
@@ -34,8 +34,9 @@ Claude runs these for you. Listed so you can see what the plugin can actually do
 | Command | What it does |
 |---|---|
 | `status [file]` | compare local hash + remote version, for one file or all |
-| `pull <file>` / `pull --all` | fetch remote as Markdown; conflicts land in `<file>.remote.md` |
+| `pull <file>` / `pull --all` | fetch remote as Markdown. Never writes over unpushed edits; conflicts land in `<file>.remote.md` |
 | `push <file> -m "msg"` | publish, with a version message. Aborts if the remote moved |
+| `resolve <file>` | record that a conflict was merged into the note, so a normal push publishes it |
 | `find <title> [--space K]` | search Confluence by title, to get an id without leaving the editor |
 | `link <path> <url-or-id>` | map a note **or** folder to an existing page/folder, then pull it |
 | `link-folder <path> <url-or-id>` | alias for `link`, forced to folder |
@@ -63,12 +64,15 @@ Claude runs these for you. Listed so you can see what the plugin can actually do
   `confluence_url`, `up`, `last_modified`, `author` and friends, so the linkage shows up in
   Obsidian's Properties panel rather than hiding in `.confsync/mapping.json`. Properties
   you add yourself are preserved untouched.
+- **Your edits are never pulled over.** `pull` skips any note with unpushed edits and
+  lists it with a comparison (your changes, the page's version, who edited it and when).
+  Claude then asks what to do with each: push, merge, overwrite or leave it.
 - **Optimistic locking.** `push` aborts if the page moved since your last sync; a
-  conflicting `pull` writes `<file>.remote.md` instead of overwriting, and Claude helps you
-  merge.
+  conflicting `pull` writes `<file>.remote.md` instead of overwriting, and Claude merges
+  the two against the last synced copy (kept in `.confsync/base/`) for you to approve.
 - **Folder name sync.** `pull --all` renames local directories to match their Confluence
   folder's current title (one-way — Confluence wins), cascading into the stored paths of
-  everything nested underneath.
+  everything nested underneath. Stored paths always use `/`, so this works on Windows too.
 - **Jira links.** Bare issue keys (`PT-1947`) and ` ```jira-issue ` fences become Confluence
   smart links with live status.
 - **Real mentions.** `@alias` becomes a Confluence mention that actually notifies, via

@@ -7,6 +7,7 @@ in a tree, which is why they take an explicit space/parent instead of parsing ar
 import sys
 from pathlib import Path
 
+from ..base import save_base
 from ..config import (FOLDERS_FILE, MAPPING_FILE, api, get_config, load_json, rel,
                       save_json)
 from ..frontmatter import (apply_frontmatter, build_confluence_frontmatter,
@@ -33,6 +34,7 @@ def register_page(cfg, s, mapping, local: Path, page_meta, body_md: str, up_note
     local.parent.mkdir(parents=True, exist_ok=True)
     local.write_text(final_text, encoding="utf-8")
     mapping[f]["hash"] = body_hash(final_text)
+    save_base(mapping[f]["page_id"], final_text)
     save_json(MAPPING_FILE, mapping)
     return mapping[f]
 

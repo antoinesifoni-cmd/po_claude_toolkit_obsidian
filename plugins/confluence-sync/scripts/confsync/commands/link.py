@@ -85,7 +85,7 @@ def cmd_link(args):
     if args.no_pull:
         print(f"Run 'conf.py pull {f}' to fetch the page content.")
         return
-    pull_one(cfg, s, mapping, f)
+    pull_one(cfg, s, mapping, f, create_dirs=True)
 
 
 def cmd_find(args):
