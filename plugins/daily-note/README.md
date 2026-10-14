@@ -31,8 +31,13 @@ since asking is the whole point.
   after your yes to the list. See task-note below.
 - **Missing meetings:** a heading for each meeting of today that the note has no section
   for, in time order. A heading you renamed still counts, when its time line is the same.
+  Meetings Google recorded but that were not on your calendar count too: a Meet started
+  on the fly, found from the "Notes:" email Gemini sends after it. Its start comes from
+  the email's subject, its end from when the notes were made, and its heading from the
+  first topic of the notes.
 - **Recaps:** under each meeting that Google recorded, a one or two sentence recap and a
-  link to the transcript, from the Gemini notes attached to the calendar event.
+  link to the transcript, from the Gemini notes attached to the calendar event, or linked
+  in Gemini's email for a meeting not on the calendar.
 - **Notes of the day:** each note you created or edited today, as its own section among
   the meetings, in time order: the title, its `#PT-xxxx` tag, `*created 10:15*` or
   `*edited 14:05*`, a one sentence recap and the link to the note. A note made and changed
@@ -144,6 +149,7 @@ prompt file in `steps/`, readable on its own, and a step can serve more than one
 | start (`daynote.py today`) | all | Obsidian's daily notes settings | nothing, it empties the folder |
 | `task-note` | end, task-note | the tasks marked `#note`, or the selected ones | `task-note.json`, `task-titles.json` |
 | `meetings` | all | Google Calendar | `meetings.json` |
+| `unscheduled` | end, recap | Gemini "Notes:" emails in Gmail | adds to `meetings.json` |
 | `alert-confluence` | start | `confluence-sync:confluence-status` | `alert-confluence.md` |
 | `summary` | start | meetings, tasks, Gmail, Jira, project `CLAUDE.md` | `summary.md` |
 | `daynote.py prose` | end | the note | `prose.json` |
