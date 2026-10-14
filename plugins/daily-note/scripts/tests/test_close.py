@@ -358,6 +358,36 @@ class CloseTests(unittest.TestCase):
         self.assertEqual(again["recaps"], "added 0, 1 already in the note")
         self.assertFalse(again["written"])
 
+    def test_unscheduled_meetings_from_gemini_emails_get_their_heading_and_recap(self):
+        # What the unscheduled step adds: a Meet started on the fly (start from the email
+        # subject, end from when the notes were made), and one joined without the invite,
+        # whose time is unknown.
+        self.put("Day2Day notes/2026-09-23.md", NOTE)
+        unscheduled = [
+            {"start": "12:06", "end": "12:31", "title": None, "heading": "Pilot scope review",
+             "pt": None, "doc": DOC_C, "unscheduled": True},
+            {"start": None, "end": None, "title": "PT-2402 Vendor sync",
+             "heading": "Vendor sync", "pt": "PT-2402", "doc": DOC_B, "unscheduled": True},
+        ]
+        self.run_file("meetings.json", {"meetings": MEETINGS["meetings"] + unscheduled})
+        self.run_file("recaps.json", {"recaps": [
+            {**unscheduled[0], "tab": None, "recap": "The pilot keeps two sprints."},
+            {**unscheduled[1], "tab": None, "recap": "The vendor ships in November."}]})
+
+        result = daynote.recap(self.root, self.now)
+
+        self.assertEqual(result["recaps"], "added 2, with 2 new headings")
+        text = self.read()
+        self.assertIn("nothing worth mentionning\n\n# Pilot scope review\n*12:06-12:31*\n\n"
+                      "**Recap:** The pilot keeps two sprints.\n"
+                      f"**Transcript:** [Google Doc](https://docs.google.com/document/d/{DOC_C}"
+                      "/edit)\n\n# Scheduling sync", text)
+        self.assertIn("# Vendor sync\n#PT-2402\n\n**Recap:** The vendor ships in November.", text)
+        self.assertLess(text.index("# Consent form wording"), text.index("# Vendor sync"))
+        self.assertLess(text.index("# Vendor sync"), text.index("---\n# Task"))
+
+        self.assertFalse(daynote.recap(self.root, self.now)["written"])
+
     def test_outside_text_is_made_inert(self):
         self.put("Day2Day notes/2026-09-23.md", NOTE)
         self.run_file("recaps.json", {"recaps": [
