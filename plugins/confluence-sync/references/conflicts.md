@@ -17,7 +17,7 @@ Either alone is not a conflict - that's just "push needed" or "pull needed".
 | Command | Behaviour on conflict |
 |---|---|
 | `status` | predicts it: `CONFLICT: local changes AND remote moved to vN`. Nothing written. |
-| `pull` | writes the remote copy to `<file>.remote.md`, leaves `<file>.md` alone, reports. |
+| `pull` | writes the remote copy to `<file>.remote.md`, leaves `<file>.md` alone, lists the note under `DECISIONS NEEDED`. |
 | `push` | aborts before uploading: `ABORT: remote is vN but you last synced vM`. |
 
 In all three cases nothing has been lost and nothing has been decided. The two versions
@@ -25,44 +25,57 @@ just exist side by side.
 
 ## The flow
 
-1. **Get both copies on disk.** If the conflict surfaced on push, run
-   `conf.py pull <file>` to produce `<file>.remote.md`. If it surfaced on pull, that file
-   already exists.
+This is the **Merge** option from the decision table in the confluence-pull skill. The
+user has already picked it; this is how to carry it out.
 
-2. **Show the user the difference.** Don't summarize it from memory:
+1. **Get the three versions.** If the conflict surfaced on push, run `conf.py pull <file>`
+   to produce `<file>.remote.md`. Then read:
+   - the note, `<file>.md`: the user's version
+   - `<file>.remote.md`: the Confluence version
+   - `.confsync/base/<page_id>.md`: the page as it was at the last sync, the common
+     ancestor. `page_id` is in the note's frontmatter.
+
+   The base is what makes the merge accurate. A paragraph that is in one version only was
+   added on that side if the base lacks it, and deleted on the other side if the base has
+   it. A note linked before 0.11.0 may have no base yet: say so, and treat every
+   difference as something to ask about instead of guessing who changed it.
+
+2. **Sort the changes** into three groups: changed by the user only, changed on
+   Confluence only, and changed on both sides in the same passage. The first two merge
+   on their own. Only the third needs a decision.
+
+3. **Write the proposal to `<file>.merged.md`**, never into the note yet. Default to
+   keeping both sides' substance: dropping someone's paragraph because it conflicted with
+   yours is the failure mode this whole flow exists to prevent. Keep the note's
+   frontmatter as it is.
+
+4. **Show a short summary and get approval:** "kept your 3 changes, added Marie-Ève's 2,
+   one real conflict in *Critères d'acceptation*: here's what I suggest." Name who changed
+   the remote side (from the decision row, or the `author` frontmatter key in
+   `.remote.md`). When two edits genuinely contradict, ask - don't pick.
+
+5. **Apply it.** Once approved, copy `<file>.merged.md` into `<file>.md`, delete the
+   `.merged.md`, then record the merge:
 
    ```
-   git diff --no-index <file>.md <file>.remote.md
+   conf.py resolve <file>
    ```
 
-   If the vault isn't a git repo, read both and lay out the differing sections. Name who
-   changed the remote side - the note's `author` frontmatter key has the last editor.
+   `resolve` moves the note's sync point to the Confluence version that was merged in and
+   removes `<file>.remote.md`. A stray `.remote.md` or `.merged.md` left behind is a
+   trap: it looks like a note, and it is not linked, so edits made in it go nowhere.
 
-3. **Propose a merge, don't impose one.** Write out the merged version and get approval
-   before it touches the note. Default to keeping both sides' substance: dropping
-   someone's paragraph because it conflicted with yours is the failure mode this whole
-   flow exists to prevent. When two edits genuinely contradict, ask - don't pick.
+6. **Push it like any other edit,** through confluence-push, with a version message that
+   says it was a merge: `-m "merge: <what came from each side>"`. No `--force`: if someone
+   edited the page again while you were merging, the push aborts and the flow starts over
+   with their new edit, instead of silently erasing it.
 
-4. **Write the merge** to `<file>.md`, then delete `<file>.remote.md`. The stray
-   `.remote.md` left behind is a trap: it looks like a note, and it is excluded from sync,
-   so edits made in it silently go nowhere.
-
-5. **Publish with force.**
-
-   ```
-   conf.py push <file> --force -m "merge: <what came from each side>"
-   ```
-
-   Force is correct *here and only here*: the local file now already contains the remote
-   edits, so there is nothing left to clobber. Confirm with the user before running it,
-   same as any push, and make the version message say it was a merge.
-
-6. **Verify.** `conf.py status <file>` should read `in sync`.
+7. **Verify.** `conf.py status <file>` should read `in sync`.
 
 ## Force outside this flow
 
-Never, without the user explicitly saying so about that specific file in this
-conversation:
+Never, without the user explicitly choosing it for that specific note in this
+conversation (the **Overwrite** and **Push mine** options in the decision table):
 
 - `pull --force` discards the user's own unsynced writing.
 - `push --force` discards a colleague's edits from the live page.

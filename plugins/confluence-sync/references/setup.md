@@ -62,8 +62,9 @@ Ask once, then stop asking. Usually **yes** for `mapping.json` and `folders.json
 team then shares page links rather than each person re-linking every note. If the user
 would rather not version sync state, add `.confsync/` to the vault's `.gitignore`.
 
-Either way, add `*.remote.md` to `.gitignore`: those are transient conflict copies and
-should never be committed.
+Either way, add `*.remote.md`, `*.merged.md` and `.confsync/base/` to `.gitignore`. The
+first two are transient copies made during a conflict. `base/` holds each page's body as of
+your own last sync, so it differs from person to person and is only useful locally.
 
 ## 6. Optional: PlantUML images
 

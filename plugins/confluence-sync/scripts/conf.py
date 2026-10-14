@@ -4,8 +4,9 @@ conf.py - Git-like sync between local Markdown files and Confluence Cloud.
 
 Commands:
   status       [file]              Compare local files vs remote versions
-  pull         <file|--all>        Download remote page(s) -> markdown (conflict-safe)
+  pull         <file|--all>        Download remote page(s) -> markdown (never over local edits)
   push         <file> -m "msg"     Upload local markdown -> Confluence (optimistic lock)
+  resolve      <file>              Record that a CONFLICT was merged into the note
   find         <title>             Search Confluence by title (to get an id to link)
   link         <path> <url|id>     Map a note/folder to an existing page/folder
   link-folder  <path> <url|id>     Alias for `link`, forced to folder
@@ -25,6 +26,15 @@ State lives in <vault>/.confsync/:
   mapping.json   { "<relative/path.md>": {"page_id": "...", "version": N, "hash": "sha256..."} }
   folders.json   { "<relative/folder/path>": {"folder_id": "...", "title": "...", "parent_id": "..."} }
   users.json     { "alias": {"account_id": "...", "display_name": "..."} }
+  base/<page_id>.md  each page's body as of the last pull/push - the merge ancestor
+
+Keys in mapping.json and folders.json always use "/", on every OS. Files written on
+Windows by <=0.10.0 used "\\" and are rewritten on the next load (see config.vault_key).
+
+pull never writes over a note that has unpushed edits. If the page also moved, the
+remote copy goes to <file>.remote.md (a CONFLICT); either way the note is listed under
+DECISIONS NEEDED for the skill to put to the user. After merging a conflict into the
+note, `resolve` moves its sync point to the merged remote version so a plain push works.
 
 mapping.json remains the source of truth for the optimistic-lock version/hash. Every
 link/pull/push also mirrors human-readable metadata (page_id, confluence_version,
@@ -75,7 +85,9 @@ Code layout - this file is only the argparse wiring; everything else is in confs
   transforms.py   markdown <-> storage format: jira links, diagrams, mentions
 
   commands/status.py    status, rebaseline          (read-only, never writes remotely)
-  commands/sync.py      pull, push                  (the two directions content moves)
+  base.py         each page's last-synced body (the merge ancestor), line-change counts
+
+  commands/sync.py      pull, push, resolve         (the two directions content moves)
   commands/link.py      link, link-folder, find     (attach to pages that exist)
   commands/create.py    create-page, create-folder  (make new ones)
   commands/scaffold.py  scaffold                    (whole trees from a YAML spec)
@@ -83,7 +95,7 @@ Code layout - this file is only the argparse wiring; everything else is in confs
 
 Dependencies run one way and stay shallow. config.py and rest.py import no siblings at
 all, so either can be read on its own; frontmatter -> config, hashing -> frontmatter,
-transforms -> config + rest; and the command modules sit on top of all of them. Nothing
+base -> config + frontmatter, transforms -> config + rest; and the command modules sit on top of all of them. Nothing
 under confsync/ imports a command module. The only command-to-command imports are
 link -> sync (link pulls straight after linking) and scaffold -> create (it creates each
 node in the tree).
@@ -107,7 +119,7 @@ from confsync.commands.create import cmd_create_folder, cmd_create_page
 from confsync.commands.link import cmd_find, cmd_link
 from confsync.commands.scaffold import cmd_scaffold
 from confsync.commands.status import cmd_rebaseline, cmd_status
-from confsync.commands.sync import cmd_pull, cmd_push
+from confsync.commands.sync import cmd_pull, cmd_push, cmd_resolve
 from confsync.commands.users import cmd_users
 
 
@@ -141,6 +153,9 @@ def main():
     sp = sub.add_parser("push"); sp.add_argument("file")
     sp.add_argument("-m", "--message", default=None); sp.add_argument("--force", action="store_true")
     sp.set_defaults(fn=cmd_push)
+
+    sp = sub.add_parser("resolve", help="record that a CONFLICT was merged into the note")
+    sp.add_argument("file"); sp.set_defaults(fn=cmd_resolve)
 
     sp = sub.add_parser("rebaseline"); sp.add_argument("--check", action="store_true")
     sp.set_defaults(fn=cmd_rebaseline)

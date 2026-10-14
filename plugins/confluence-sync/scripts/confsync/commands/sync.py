@@ -1,14 +1,16 @@
-"""pull and push - the two directions content actually moves.
+"""pull, push and resolve - the commands that move content.
 
 pull_one is factored out of cmd_pull so `link` can take the remote copy immediately after
 linking, without fabricating an args namespace.
 """
 
 import sys
+from datetime import datetime
 from pathlib import Path
 
-from ..config import (FOLDERS_FILE, MAPPING_FILE, VAULT, api, get_config, load_json,
-                      rel, save_json)
+from ..base import line_changes, load_base, save_base
+from ..config import (FOLDERS_FILE, MAPPING_FILE, VAULT, api, get_config, is_under,
+                      load_json, rel, save_json)
 from ..frontmatter import (apply_frontmatter, build_confluence_frontmatter,
                            read_local_frontmatter, split_frontmatter)
 from ..hashing import HASH_ALGO, body_hash, local_body_hash
@@ -22,7 +24,11 @@ def sync_folders(cfg, s):
     Confluence wins (no folder body to conflict on). A rename cascades into every
     mapping.json/folders.json path nested under the renamed folder. Re-reads folders.json
     each iteration since an earlier rename in this same pass may have already moved a
-    later entry's path.
+    later entry's path. Keys always use "/" (see config.vault_key), so depth and nesting
+    are plain string tests.
+
+    The rename goes straight to disk, not through Obsidian, so wikilinks that spell out
+    a folder path are not rewritten.
     """
     initial = load_json(FOLDERS_FILE, {})
     if not initial:
@@ -50,25 +56,55 @@ def sync_folders(cfg, s):
 
         local.rename(new_local)
         new_f = rel(new_local)
-        old_prefix, new_prefix = f + "/", new_f + "/"
 
         mapping = load_json(MAPPING_FILE, {})
         for path_key in list(mapping.keys()):
-            if path_key.startswith(old_prefix):
-                mapping[new_prefix + path_key[len(old_prefix):]] = mapping.pop(path_key)
+            if is_under(path_key, f):
+                mapping[new_f + path_key[len(f):]] = mapping.pop(path_key)
         save_json(MAPPING_FILE, mapping)
 
         for other_key in list(folders.keys()):
-            if other_key != f and other_key.startswith(old_prefix):
-                folders[new_prefix + other_key[len(old_prefix):]] = folders.pop(other_key)
+            if is_under(other_key, f):
+                folders[new_f + other_key[len(f):]] = folders.pop(other_key)
         folders[new_f] = folders.pop(f)
         folders[new_f]["title"] = remote_title
         save_json(FOLDERS_FILE, folders)
         print(f"folder: renamed \"{f}\" -> \"{new_f}\" (Confluence title changed)")
 
 
-def pull_one(cfg, s, mapping, f, force=False) -> bool:
+def describe(f, local, entry, page, remote_md, fm_fields, conflict):
+    """One row of the decision table the pull skill shows for a note it left alone."""
+    base = load_base(entry["page_id"])
+    local_text = local.read_text(encoding="utf-8")
+    if base is not None:
+        yours = line_changes(base, local_text)
+    elif not conflict:
+        yours = line_changes(remote_md, local_text)  # remote unchanged, so it is the base
+    else:
+        yours = "size unknown (no copy of the last sync)"
+    if not conflict:
+        theirs = "no change since your last sync"
+    elif base is not None:
+        theirs = line_changes(base, remote_md) + " since your last sync"
+    else:
+        theirs = "changed since your last sync (size unknown)"
+    edited = datetime.fromtimestamp(local.stat().st_mtime).strftime("%Y-%m-%d %H:%M")
+    row = (f"{f} | {'CONFLICT' if conflict else 'push needed'}"
+           f" | yours: edited {edited}, {yours}"
+           f" | Confluence: v{page['version']['number']} by {fm_fields.get('author', '?')}"
+           f" on {fm_fields.get('last_modified', '?')}, {theirs}")
+    if conflict:
+        row += f" | remote copy: {local.with_suffix('.remote.md').name}"
+    return row
+
+
+def pull_one(cfg, s, mapping, f, force=False, decisions=None, create_dirs=False) -> bool:
     """Pull one mapped file. False if it was skipped or left as a conflict.
+
+    Only writes the note when Confluence has something new and the note has nothing
+    unpushed - or when forced. A note with local edits is never touched: if the page
+    did not move it is just "push needed", if it did it is a CONFLICT and the remote copy
+    goes beside it. Either way a row goes into `decisions` for the skill to show.
 
     Split out of cmd_pull so `link` can take the remote copy straight after linking,
     without faking an args namespace.
@@ -78,20 +114,38 @@ def pull_one(cfg, s, mapping, f, force=False) -> bool:
         print(f"{f}: not linked, skipping")
         return False
     local = VAULT / f
+    if not local.exists() and not local.parent.is_dir() and not (force or create_dirs):
+        # Almost always a stale link left by a folder moved outside this tool, not a new
+        # page - writing it would rebuild the old folder next to the real one.
+        print(f"{f}: its folder no longer exists locally - skipped. If the folder was "
+              f"moved or renamed, re-link the note at its new path.")
+        return False
+
     page = get_page_body(cfg, s, entry["page_id"])
     remote_v = page["version"]["number"]
     remote_md = storage_to_md(page["body"]["storage"]["value"])
 
-    local_dirty = local.exists() and local_body_hash(local) != entry["hash"]
+    local_changed = local.exists() and local_body_hash(local) != entry["hash"]
+    remote_changed = remote_v != entry["version"]
     fm_fields = build_confluence_frontmatter(cfg, mapping, page)
     existing_fm = read_local_frontmatter(local)
 
-    if local_dirty and remote_v != entry["version"] and not force:
-        side = local.with_suffix(".remote.md")
-        side.write_text(apply_frontmatter(remote_md, existing_fm, fm_fields), encoding="utf-8")
-        print(f"{f}: CONFLICT - local edits + remote v{remote_v}."
-              f"\n  Remote saved to {side.name}. Merge manually, then push."
-              f"\n  (or re-run pull --force to overwrite local)")
+    if local_changed and not force:
+        if remote_changed:
+            side = local.with_suffix(".remote.md")
+            side.write_text(apply_frontmatter(remote_md, existing_fm, fm_fields), encoding="utf-8")
+            entry["conflict_version"] = remote_v
+            save_json(MAPPING_FILE, mapping)
+            print(f"{f}: CONFLICT - local edits + remote v{remote_v}."
+                  f"\n  Remote saved to {side.name}. Your note was not changed.")
+        else:
+            print(f"{f}: local changes, push needed - skipped")
+        if decisions is not None:
+            decisions.append(describe(f, local, entry, page, remote_md, fm_fields, remote_changed))
+        return False
+
+    if not remote_changed and local.exists() and not force:
+        print(f"{f}: already in sync (v{remote_v})")
         return False
 
     final_text = apply_frontmatter(remote_md, existing_fm, fm_fields)
@@ -99,6 +153,8 @@ def pull_one(cfg, s, mapping, f, force=False) -> bool:
     local.write_text(final_text, encoding="utf-8")
     entry.update(version=remote_v, hash=body_hash(final_text),
                  hash_algo=HASH_ALGO, title=page["title"])
+    entry.pop("conflict_version", None)
+    save_base(entry["page_id"], final_text)
     save_json(MAPPING_FILE, mapping)
     print(f"{f}: pulled v{remote_v} (\"{page['title']}\")")
     return True
@@ -111,8 +167,41 @@ def cmd_pull(args):
         sync_folders(cfg, s)
     mapping = load_json(MAPPING_FILE, {})
     targets = sorted(mapping.keys()) if args.all else [rel(Path(args.file))]
+    decisions = []
     for f in targets:
-        pull_one(cfg, s, mapping, f, force=args.force)
+        pull_one(cfg, s, mapping, f, force=args.force, decisions=decisions)
+    if decisions:
+        n = len(decisions)
+        print(f"\nDECISIONS NEEDED - {n} note{'s' if n > 1 else ''} left untouched:")
+        for row in decisions:
+            print(f"  {row}")
+
+
+def cmd_resolve(args):
+    """resolve <file> - record that a CONFLICT has been merged into the note.
+
+    Moves the note's sync point to the remote version that was merged in, so the next
+    push is an ordinary one: it still aborts if the page moved again since, instead of
+    needing --force and trusting that nobody else edited in the meantime.
+    """
+    mapping = load_json(MAPPING_FILE, {})
+    f = rel(Path(args.file))
+    entry = mapping.get(f)
+    if not entry:
+        sys.exit(f"{f} is not linked.")
+    side = (VAULT / f).with_suffix(".remote.md")
+    remote_v = entry.get("conflict_version")
+    if remote_v is None or not side.exists():
+        sys.exit(f"{f}: no pending conflict. Run 'conf.py pull {f}' to check for one.")
+
+    remote_text = side.read_text(encoding="utf-8")
+    entry.update(version=remote_v, hash=body_hash(remote_text), hash_algo=HASH_ALGO)
+    entry.pop("conflict_version")
+    save_base(entry["page_id"], remote_text)
+    save_json(MAPPING_FILE, mapping)
+    side.unlink()
+    print(f"{f}: merge recorded against Confluence v{remote_v}, {side.name} removed."
+          f"\nThe note now reads 'push needed' - push it to publish the merge.")
 
 
 def cmd_push(args):
@@ -148,5 +237,7 @@ def cmd_push(args):
 
     entry.update(version=result["version"]["number"], hash=body_hash(final_text),
                  hash_algo=HASH_ALGO)
+    entry.pop("conflict_version", None)
+    save_base(entry["page_id"], final_text)
     save_json(MAPPING_FILE, mapping)
     print(f"{f}: pushed as v{result['version']['number']} - \"{message}\"")

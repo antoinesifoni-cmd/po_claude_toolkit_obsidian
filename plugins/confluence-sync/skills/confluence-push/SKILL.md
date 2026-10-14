@@ -41,9 +41,12 @@ Someone edited the page since your last sync. This is the lock doing its job - n
 written. Do not reach for `--force`.
 
 Follow `${CLAUDE_PLUGIN_ROOT}/references/conflicts.md`, which owns the merge flow shared
-with confluence-pull. The short version: pull, merge, then push the merged copy. Force is
-legitimate only at the end of that sequence, because by then the local file already
-contains the other person's edits.
+with confluence-pull. The short version: pull, merge, `resolve`, then an ordinary push of
+the merged copy - no `--force`, so the lock still catches anyone who edits in between.
+
+The one time `push --force` is right is when the user, shown the decision table, chose to
+publish their version over a colleague's for that note (the "Push mine" option in
+`references/conflicts.md`).
 
 ## First push to a page authored in Confluence
 
