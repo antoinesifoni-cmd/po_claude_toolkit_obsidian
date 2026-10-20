@@ -25,7 +25,8 @@ first move regardless of which direction you turn out to want.
 
 Shared ground that no single skill owns lives in `references/`: `conflicts.md` (the merge
 flow, used by both pull and push), `creating.md` (create-page, create-folder, scaffold),
-`setup.md` (first-time setup), `transforms.md` (what converts, what doesn't).
+`project-docs.md` (proposing Read Me and CLAUDE.md updates after a push), `setup.md`
+(first-time setup), `transforms.md` (what converts, what doesn't).
 
 ## Commands
 
@@ -60,6 +61,10 @@ Claude runs these for you. Listed so you can see what the plugin can actually do
 - **A project template.** The Medfar project tree ships as `templates/project.yaml`:
   variables for the Jira key and project name, an optional per-team split, Obsidian-only
   nodes (`CLAUDE.md`), and frontmatter tags applied to every note.
+- **Project docs stay current.** After a push that changes scope, decisions, teams, Jira
+  epics, dates or the folder structure, Claude proposes short edits to the project's Read
+  Me and CLAUDE.md (Yes / No / Only CLAUDE.md). On Yes it edits both and pushes the Read
+  Me, after its own confirmation. Small edits don't trigger it.
 - **Frontmatter mirroring.** Linked notes carry `page_id`, `confluence_version`,
   `confluence_url`, `up`, `last_modified`, `author` and friends, so the linkage shows up in
   Obsidian's Properties panel rather than hiding in `.confsync/mapping.json`. Properties
