@@ -31,6 +31,13 @@ State three things and get an explicit yes:
 Always pass `-m`. If the user didn't give a message, propose one that summarizes what
 actually changed and confirm it. "Update" is not a version message.
 
+## After a successful push
+
+Check whether the change is big enough to update the project's Read Me and CLAUDE.md, and
+if so propose the edits. Follow `${CLAUDE_PLUGIN_ROOT}/references/project-docs.md`, which
+owns when to ask, what to propose and how the Read Me gets pushed. It needs the note's
+previous version from `.confsync/base/`, so read that before running the push.
+
 ## When push aborts
 
 ```
