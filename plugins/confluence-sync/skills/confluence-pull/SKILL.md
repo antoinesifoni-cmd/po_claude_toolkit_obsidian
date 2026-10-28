@@ -99,10 +99,16 @@ destructive act against the user's own work, so:
 
 ## What does not survive the round trip
 
-Confluence-native content flattens on the way into Markdown: macros (status lozenges, page
-properties, tables of contents, children displays), layouts and columns, and inline
-comments are dropped; complex tables become plain ones. Diagrams and mentions do come back
-- see `${CLAUDE_PLUGIN_ROOT}/references/transforms.md`.
+Panels, decisions, tasks, statuses, dates, images, page links, code blocks, diagrams and
+mentions come back as Obsidian Markdown (callouts, `- [ ]`, `` `🟢 text` ``, `![[...]]`,
+`[[...]]`). Images are downloaded into the vault's attachment folder. Anything else (a TOC,
+an app macro, a layout) becomes a `%%confluence-keep:<id> Label%%` line that push puts
+back, so it is not lost. Only table cell colours, column widths, merged cells and text
+colour flatten, and inline comments stay in Confluence - see
+`${CLAUDE_PLUGIN_ROOT}/references/transforms.md`.
+
+If the user asks what a `%%confluence-keep` line is: it stands for a piece of the page
+with no Markdown. Leave it where it is to keep it, delete it to remove it on next push.
 
 This matters most on the **first** pull of a page that was authored in Confluence rather
 than by this workflow. Warn the user, pull once, and have them check the note looks

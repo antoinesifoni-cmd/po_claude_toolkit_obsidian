@@ -46,6 +46,20 @@ USERS_FILE = STATE_DIR / "users.json"
 PLANTUML_JAR = STATE_DIR / "plantuml.jar"
 
 
+# Confluence content pull has no Markdown for (a TOC, an app macro...), one file per
+# piece named by a hash of its XML. The note holds a marker line, push puts the XML back.
+KEEP_DIR = STATE_DIR / "keep"
+
+
+# Atlassian-only emoji (":flag_on:") seen on pull, so push can turn the shortcode back.
+EMOJI_FILE = STATE_DIR / "emoji.json"
+
+
+# Images moved between the vault and Confluence: "<page_id>/<filename>" -> local name,
+# attachment version and content hash, so unchanged images are not sent or fetched again.
+ATTACHMENTS_FILE = STATE_DIR / "attachments.json"
+
+
 # The body of every linked page as it stood at the last pull or push, one file per page
 # id. It is the common ancestor a merge needs: without it, a paragraph present on one
 # side only could have been added there or deleted on the other, and nothing says which.

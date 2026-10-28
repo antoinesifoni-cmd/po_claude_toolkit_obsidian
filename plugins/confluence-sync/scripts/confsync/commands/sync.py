@@ -123,11 +123,12 @@ def pull_one(cfg, s, mapping, f, force=False, decisions=None, create_dirs=False)
 
     page = get_page_body(cfg, s, entry["page_id"])
     remote_v = page["version"]["number"]
-    remote_md = storage_to_md(page["body"]["storage"]["value"])
+    fm_fields = build_confluence_frontmatter(cfg, mapping, page)
+    remote_md = storage_to_md(page["body"]["storage"]["value"], cfg, s, entry["page_id"],
+                              local, fm_fields.get("confluence_space"))
 
     local_changed = local.exists() and local_body_hash(local) != entry["hash"]
     remote_changed = remote_v != entry["version"]
-    fm_fields = build_confluence_frontmatter(cfg, mapping, page)
     existing_fm = read_local_frontmatter(local)
 
     if local_changed and not force:
@@ -226,7 +227,7 @@ def cmd_push(args):
         )
 
     existing_fm, md_text = split_frontmatter(local.read_text(encoding="utf-8"))
-    storage = md_to_storage(md_text, cfg, s, entry["page_id"])
+    storage = md_to_storage(md_text, cfg, s, entry["page_id"], local)
     message = args.message or "Updated via confluence-sync"
     result = put_page(cfg, s, entry["page_id"], entry.get("title") or meta["title"],
                       storage, remote_v + 1, message)
