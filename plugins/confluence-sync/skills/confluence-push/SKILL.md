@@ -57,12 +57,14 @@ publish their version over a colleague's for that note (the "Push mine" option i
 
 ## First push to a page authored in Confluence
 
-If the page was written in Confluence rather than by this workflow, its macros, layouts,
-and inline comments do not exist in the Markdown - so pushing replaces a rich page with a
-flattened one. Before the first push to such a page:
+If the page was written in Confluence rather than by this workflow, a few things have no
+Markdown: table cell colours, column widths, merged cells, text colour, and inline
+comments. Everything else either converts or is kept behind a
+`%%confluence-keep:...%%` marker that push puts back. Before the first push to such a page:
 
 - Pull it, and have the user confirm the local note actually looks complete.
-- Say explicitly that anything not visible in the note will be gone from the page.
+- Say explicitly that table colours/merges and text colour will be flattened, and that a
+  deleted `%%confluence-keep` marker removes that piece from the page.
 
 Pages already owned by this workflow are fine; this is a one-time risk per adopted page.
 See `${CLAUDE_PLUGIN_ROOT}/references/transforms.md` for what converts and what doesn't.
@@ -77,9 +79,14 @@ Handled automatically (details in `references/transforms.md`):
 - **Mentions** - `@alias` becomes a real mention via `users.json`. An unknown alias is
   pushed as plain text with a warning; offer to run
   `conf.py users "<name>" --add` and push again rather than leaving it as text.
-- **Diagrams** - ` ```plantuml ` and ` ```mermaid ` fences push their source into a
-  collapsible section, plus a rendered PNG for PlantUML when `java` and `plantuml.jar` are
-  available locally.
+- **Diagrams** - ` ```mermaid ` fences are drawn by the Mermaid app on Confluence,
+  ` ```plantuml ` fences get a PNG when `java` and `plantuml.jar` are available locally.
+  The source always goes in a collapsible section.
+- **Rich content** - callouts become panels/decisions/expands, `- [ ]` tasks become
+  Confluence tasks, `` `🟢 text` `` becomes a status, `![[image.png|409]]` is uploaded
+  (only if it changed), `[[Note]]` links to the note's page, `%%confluence-keep%%` markers
+  are swapped back for the content they kept. An image that can't be found in the vault is
+  pushed as text with a warning: tell the user.
 - **Frontmatter** - stripped before upload. It never appears on the page.
 
 ## There is no unpublish

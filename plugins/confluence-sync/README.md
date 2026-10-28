@@ -82,9 +82,16 @@ Claude runs these for you. Listed so you can see what the plugin can actually do
   smart links with live status.
 - **Real mentions.** `@alias` becomes a Confluence mention that actually notifies, via
   `.confsync/users.json`.
-- **Diagrams.** ` ```plantuml ` and ` ```mermaid ` fences push their source into a
-  collapsible section. PlantUML additionally renders a PNG when local `java` +
-  `plantuml.jar` are available in `.confsync/`.
+- **Rich pages that round-trip.** Obsidian callouts become Confluence panels, decisions
+  and expand sections; `- [ ]` tasks become Confluence tasks (with `📅` dates); a code span
+  like `` `🟢 In scope` `` becomes a status lozenge; `![[image.png|409]]` uploads the image;
+  `[[Note]]` links to the note's page; code blocks keep their language; highlight,
+  strikethrough and underline survive. Push a note, pull it back, and it is identical.
+- **Nothing is silently dropped.** Confluence content with no Markdown equivalent (a TOC,
+  an app macro...) is kept byte for byte behind a marker line and put back on push.
+- **Diagrams.** ` ```mermaid ` fences are drawn live on Confluence by the Mermaid app,
+  ` ```plantuml ` fences render a PNG when local `java` + `plantuml.jar` are available in
+  `.confsync/`. The source always goes in a collapsible section.
 
 ## Setup (once per person)
 
@@ -102,7 +109,7 @@ Full walkthrough in `references/setup.md`. The short version:
 5. Optional (PlantUML images): drop `plantuml.jar` into `<vault>/.confsync/`.
 
 State lives in `<vault>/.confsync/` — `config.json`, `mapping.json`, `folders.json`,
-`users.json`. Keeping `mapping.json` in git is usually what you want, so the team shares
+`users.json`, plus `keep/`, `emoji.json` and `attachments.json` written by pull and push. Keeping `mapping.json` in git is usually what you want, so the team shares
 page links.
 
 ## Usage (via Claude Code, from inside your vault)
@@ -123,11 +130,9 @@ tree, and creates it only once you say yes.
 
 ## Caveats
 
-Round-tripping is lossy for Confluence-native content. Macros (status lozenges, page
-properties, TOC), layouts and columns, and inline comments do not survive the storage →
-Markdown conversion; complex tables flatten to plain ones. Keep pages owned by this
-workflow Markdown-shaped, and for a page heavily authored in Confluence, pull once and
-inspect before adopting it.
+Table cell colours, column widths and merged cells have no Markdown, so they flatten;
+text colour is dropped; inline comments stay in Confluence. Panels, tasks and decisions
+inside a table cell are kept as markers rather than converted. For a page heavily authored
+in Confluence, pull once and inspect before adopting it.
 
-See `references/transforms.md` for the full transform reference and for the Confluence
-constructs that are deliberately not implemented yet.
+See `references/transforms.md` for every conversion, with its exact syntax.

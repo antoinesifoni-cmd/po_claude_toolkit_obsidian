@@ -47,6 +47,9 @@ vault root - that directory *is* the marker.
 | `mapping.json` | note path → page id, last-synced version, body hash |
 | `folders.json` | directory path → Confluence folder id |
 | `users.json` | `@alias` → Confluence account id, for mentions |
+| `keep/` | Confluence content with no Markdown, one XML file per piece (written by pull) |
+| `emoji.json` | Atlassian-only emoji seen on pull, so push can turn `:shortcode:` back |
+| `attachments.json` | images synced per page: local name, version, content hash |
 
 ## 4. Jira project keys
 
@@ -62,13 +65,19 @@ Ask once, then stop asking. Usually **yes** for `mapping.json` and `folders.json
 team then shares page links rather than each person re-linking every note. If the user
 would rather not version sync state, add `.confsync/` to the vault's `.gitignore`.
 
-Either way, add `*.remote.md`, `*.merged.md` and `.confsync/base/` to `.gitignore`. The
-first two are transient copies made during a conflict. `base/` holds each page's body as of
-your own last sync, so it differs from person to person and is only useful locally.
+Either way, add `*.remote.md`, `*.merged.md`, `.confsync/base/` and
+`.confsync/attachments.json` to `.gitignore`. The first two are transient copies made
+during a conflict. `base/` holds each page's body as of your own last sync, and
+`attachments.json` what you yourself uploaded or downloaded, so both differ from person to
+person. Do version `keep/` and `emoji.json` if the notes are shared: a teammate's push needs
+them to put kept content back.
 
-## 6. Optional: PlantUML images
+## 6. Diagrams
 
-Drop `plantuml.jar` (https://plantuml.com/download) into `<vault>/.confsync/` and make
-sure `java` is on the PATH. Without it, ` ```plantuml ` fences still push their source as
-a collapsible section - just with no rendered image above it. Mermaid has no local
-renderer and is always text-only.
+Mermaid fences are drawn on Confluence by the "Mermaid diagram" app. If a space doesn't
+have the app, set `"mermaid_app": false` in `config.json` and only the source is pushed.
+
+For PlantUML images, drop `plantuml.jar` (https://plantuml.com/download) into
+`<vault>/.confsync/` and make sure `java` is on the PATH. Without it, ` ```plantuml `
+fences still push their source as a collapsible section - just with no rendered image
+above it.

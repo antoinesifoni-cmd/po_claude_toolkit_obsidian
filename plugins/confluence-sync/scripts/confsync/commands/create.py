@@ -14,7 +14,7 @@ from ..frontmatter import (apply_frontmatter, build_confluence_frontmatter,
                            read_local_frontmatter, split_frontmatter)
 from ..hashing import HASH_ALGO, body_hash
 from ..rest import post_folder, post_page, put_page, resolve_target
-from ..transforms import DIAGRAM_FENCE_RE, md_to_storage
+from ..transforms import md_to_storage, needs_page_id
 
 
 def register_page(cfg, s, mapping, local: Path, page_meta, body_md: str, up_note=None):
@@ -43,22 +43,22 @@ def create_page_here(cfg, s, space_id, title, parent_id, local: Path, mapping,
                      message=None, up_note=None):
     """Create a Confluence page from a local note (or an empty one) and link the two.
 
-    Pages carrying ```plantuml/```mermaid fences are created empty and then pushed,
-    because rendering a diagram uploads an attachment and that needs a page id that does
-    not exist yet. Everything else is created with its body inline, so the page starts
-    life at v1 with real content instead of an empty v1 nobody wants in the history.
+    Pages carrying diagram fences or image embeds are created empty and then pushed,
+    because those upload attachments and that needs a page id that does not exist yet.
+    Everything else is created with its body inline, so the page starts life at v1 with
+    real content instead of an empty v1 nobody wants in the history.
     """
     body_md = ""
     if local.exists():
         body_md = split_frontmatter(local.read_text(encoding="utf-8"))[1]
 
-    has_diagrams = bool(DIAGRAM_FENCE_RE.search(body_md))
-    storage = "" if has_diagrams else md_to_storage(body_md, cfg, s, None)
+    needs_id = needs_page_id(body_md)
+    storage = "" if needs_id else md_to_storage(body_md, cfg, s, None, local)
     page = post_page(cfg, s, space_id, title, parent_id, storage)
     entry = register_page(cfg, s, mapping, local, page, body_md, up_note)
 
-    if has_diagrams:
-        storage = md_to_storage(body_md, cfg, s, page["id"])
+    if needs_id:
+        storage = md_to_storage(body_md, cfg, s, page["id"], local)
         result = put_page(cfg, s, page["id"], title, storage, entry["version"] + 1,
                           message or "Initial content (confluence-sync)")
         entry = register_page(cfg, s, mapping, local, result, body_md, up_note)

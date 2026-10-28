@@ -61,7 +61,7 @@ class VaultTest(unittest.TestCase):
             (sync, "FOLDERS_FILE", self.folders_file),
         ]:
             stack.enter_context(mock.patch.object(mod, name, value))
-        stack.enter_context(mock.patch.object(sync, "storage_to_md", lambda html: html))
+        stack.enter_context(mock.patch.object(sync, "storage_to_md", lambda html, *a: html))
         self.remote = None
         stack.enter_context(mock.patch.object(sync, "get_page_body",
                                               lambda cfg, s, pid: self.remote))

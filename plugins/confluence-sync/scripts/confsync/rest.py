@@ -152,14 +152,34 @@ def resolve_target(cfg, s, parent, space):
     return personal_space_id(cfg, s), None
 
 
-def upload_attachment(cfg, s, page_id, filepath: Path):
-    """Upload/replace an attachment on a page (v1 endpoint - v2 has no upload)."""
+def upload_attachment(cfg, s, page_id, filepath: Path, filename=None):
+    """Upload/replace an attachment on a page (v1 endpoint - v2 has no upload).
+
+    Returns (filename, version). filename defaults to the file's own name.
+    """
+    name = filename or filepath.name
     url = f"{cfg['base_url']}/wiki/rest/api/content/{page_id}/child/attachment"
     headers = {"X-Atlassian-Token": "nocheck"}
     with open(filepath, "rb") as f:
-        files = {"file": (filepath.name, f)}
-        r = s.put(url, headers=headers, files=files)  # PUT = create or update
+        r = s.put(url, headers=headers, files={"file": (name, f)})  # PUT = create or update
         if not r.ok:
-            r = s.post(url, headers=headers, files=files)
+            f.seek(0)
+            r = s.post(url, headers=headers, files={"file": (name, f)})
     r.raise_for_status()
-    return filepath.name
+    results = r.json().get("results") or [r.json()]
+    return name, (results[0].get("version") or {}).get("number")
+
+
+def download_attachment(cfg, s, page_id, filename, dest: Path):
+    """Save a page's attachment to dest. Returns its version, or None if it is not there."""
+    r = s.get(f"{cfg['base_url']}/wiki/rest/api/content/{page_id}/child/attachment",
+              params={"filename": filename, "expand": "version"})
+    r.raise_for_status()
+    results = r.json().get("results", [])
+    if not results:
+        return None
+    data = s.get(cfg["base_url"] + "/wiki" + results[0]["_links"]["download"])
+    data.raise_for_status()
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    dest.write_bytes(data.content)
+    return results[0]["version"]["number"]
