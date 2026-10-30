@@ -166,7 +166,7 @@ class InlineTests(ConverterTest):
         self.assertIn('ri:content-title="File de transcription" ri:space-key="RD"', self.push(md))
 
     def test_smart_links(self):
-        storage = self.round_trip("Maquette <https://www.figma.com/design/abc/Alertes> et PT-1794")
+        storage = self.round_trip("Maquette <https://www.figma.com/design/abc/Alertes> et [PT-1794](https://exemple.atlassian.net/browse/PT-1794)")
         self.assertEqual(storage.count('data-card-appearance="inline"'), 2)
 
     def test_emoji(self):
@@ -284,7 +284,7 @@ class RegressionTests(ConverterTest):
                                    'ac:schema-version="1"></ac:structured-macro>'),
                          "%%confluence:toc%%\n")
 
-    def test_legacy_jira_macro_comes_back_as_the_key(self):
+    def test_legacy_jira_macro_comes_back_as_a_link(self):
         # What Confluence stores after it converts a pushed Jira smart link.
         def macro(key):
             return ('<ac:structured-macro ac:local-id="a1" ac:macro-id="b2" ac:name="jira" '
@@ -292,10 +292,15 @@ class RegressionTests(ConverterTest):
                     '<ac:parameter ac:name="serverId">383d35c0</ac:parameter>'
                     '<ac:parameter ac:name="server">System Jira</ac:parameter></ac:structured-macro>')
         self.assertEqual(self.pull(f"<ul><li>Bug {macro('PT-31022')}, {macro('PT-31023')}</li></ul>"),
-                         "- Bug PT-31022, PT-31023\n")
+                         "- Bug [PT-31022](https://exemple.atlassian.net/browse/PT-31022), "
+                         "[PT-31023](https://exemple.atlassian.net/browse/PT-31023)\n")
         self.assertEqual(self.pull(f"<p>{macro('MYLE-9')}</p>"),
                          "[MYLE-9](https://exemple.atlassian.net/browse/MYLE-9)\n")
         self.assertIn('href="https://exemple.atlassian.net/browse/PT-31022"', self.push("Bug PT-31022"))
+
+    def test_typed_key_comes_back_as_a_link(self):
+        storage = self.push("Voir PT-1794")
+        self.assertEqual(self.pull(storage), "Voir [PT-1794](https://exemple.atlassian.net/browse/PT-1794)\n")
 
     def test_jira_query_macro_is_kept(self):
         storage = ('<ac:structured-macro ac:name="jira"><ac:parameter ac:name="jqlQuery">'
@@ -319,7 +324,7 @@ class DocumentTests(ConverterTest):
             "## Décisions\n\n> [!decision]\n> - Seuil de tension à 140/90\n\n"
             "## Suivi\n\n- [ ] Valider avec la Dre Gagnon 📅 2026-11-03\n- [x] Maquette ![[alerte.png|300]]\n\n"
             "| Volet | Statut |\n| --- | --- |\n| Signes vitaux | `🟢 In scope` |\n| Vaccins | `🔴 Out of scope` |\n\n"
-            "Voir [[PRD - Alertes]] et PT-1794.")
+            "Voir [[PRD - Alertes]] et [PT-1794](https://exemple.atlassian.net/browse/PT-1794).")
 
 
 if __name__ == "__main__":
