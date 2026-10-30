@@ -55,10 +55,35 @@ def get_page_body(cfg, s, page_id):
     return r.json()
 
 
-def put_page(cfg, s, page_id, title, storage_html, new_version, message):
+def get_draft(cfg, s, page_id):
+    """The page's shared editor draft (unpublished changes), or None if it has none.
+
+    A draft's version number is its own counter, not the published version: it stays 1
+    while the page is published as v2, v3... A draft PUT has to send that number.
+    """
+    r = s.get(
+        f"{cfg['base_url']}/wiki/api/v2/pages/{page_id}",
+        params={"body-format": "storage", "get-draft": "true"},
+    )
+    if r.status_code == 404:
+        return None
+    r.raise_for_status()
+    page = r.json()
+    return page if page.get("status") == "draft" else None
+
+
+def user_name(cfg, s, account_id):
+    """Display name for an account id, or the id itself if it can't be looked up."""
+    r = s.get(f"{cfg['base_url']}/wiki/rest/api/user", params={"accountId": account_id})
+    return r.json().get("displayName", account_id) if r.ok else account_id
+
+
+def put_page(cfg, s, page_id, title, storage_html, new_version, message, status="current"):
+    """status="draft" writes the editor draft instead of publishing; new_version is then
+    the draft's own number (see get_draft) and the message is dropped by Confluence."""
     payload = {
         "id": page_id,
-        "status": "current",
+        "status": status,
         "title": title,
         "body": {"representation": "storage", "value": storage_html},
         "version": {"number": new_version, "message": message},
@@ -73,11 +98,16 @@ def put_page(cfg, s, page_id, title, storage_html, new_version, message):
     return r.json()
 
 
-def post_page(cfg, s, space_id, title, parent_id, storage_html=""):
-    """Create a page. parent_id may be a page id OR a folder id - Confluence accepts both."""
+def post_page(cfg, s, space_id, title, parent_id, storage_html="", status="current"):
+    """Create a page. parent_id may be a page id OR a folder id - Confluence accepts both.
+
+    status="draft" creates a page nobody sees until it is published from the editor. It
+    has no published version: GET returns status "draft", version 1, and publishing it
+    (from the editor, or a PUT status=current with version 1) makes it v1.
+    """
     payload = {
         "spaceId": str(space_id),
-        "status": "current",
+        "status": status,
         "title": title,
         "body": {"representation": "storage", "value": storage_html},
     }
@@ -155,16 +185,21 @@ def resolve_target(cfg, s, parent, space):
 def upload_attachment(cfg, s, page_id, filepath: Path, filename=None):
     """Upload/replace an attachment on a page (v1 endpoint - v2 has no upload).
 
-    Returns (filename, version). filename defaults to the file's own name.
+    Returns (filename, version). filename defaults to the file's own name. A page that is
+    still a draft (never published) answers 404 unless the call says status=draft.
     """
     name = filename or filepath.name
     url = f"{cfg['base_url']}/wiki/rest/api/content/{page_id}/child/attachment"
     headers = {"X-Atlassian-Token": "nocheck"}
     with open(filepath, "rb") as f:
-        r = s.put(url, headers=headers, files={"file": (name, f)})  # PUT = create or update
-        if not r.ok:
+        for params in (None, {"status": "draft"}):
             f.seek(0)
-            r = s.post(url, headers=headers, files={"file": (name, f)})
+            r = s.put(url, headers=headers, params=params, files={"file": (name, f)})
+            if not r.ok:  # PUT = create or update, POST = create
+                f.seek(0)
+                r = s.post(url, headers=headers, params=params, files={"file": (name, f)})
+            if r.status_code != 404:
+                break
     r.raise_for_status()
     results = r.json().get("results") or [r.json()]
     return name, (results[0].get("version") or {}).get("number")

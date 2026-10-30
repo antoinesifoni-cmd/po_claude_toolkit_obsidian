@@ -46,6 +46,12 @@ Each line is `<file>: v<local> local | v<remote> remote -> <state>`.
 | `remote moved to vN (pull needed)` | someone edited the page | confluence-pull |
 | `CONFLICT: local changes AND remote moved` | both sides moved | `references/conflicts.md` |
 | `not linked` | no mapping entry for that path | confluence-link |
+| `draft sent <when>, not published yet` | `push --draft` went up, nobody published it yet | publish it from the Confluence editor |
+| `draft sent <when>, edited in the Confluence editor since, ...` | same, and someone changed the draft | publish it from the Confluence editor |
+| `remote moved to vN, most likely your draft ... published` | the page moved after a draft push and the note is still what was sent | confluence-pull: it takes the published version, no conflict |
+| `draft sent <when> is gone from Confluence (discarded?)` | the draft was thrown away in Confluence | confluence-push again, or ask |
+| `new page, still a draft in Confluence (never published)` | made with `create-page --draft`, not published yet | publish it from the Confluence editor; more edits go up with `push --draft` |
+| `... [draft sent <when>, note edited since]` | the note changed after its draft push | as the state before the brackets says |
 
 A `CONFLICT` line is a *prediction*, not damage. Nothing has happened yet - it is telling
 you that a plain pull would have to choose. That is exactly the moment to read

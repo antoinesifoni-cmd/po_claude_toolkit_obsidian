@@ -1,7 +1,9 @@
 # Creating Confluence content
 
 `link` attaches to something that already exists. These commands make new things and link
-them in the same step. All of them publish, so all of them need confirmation first.
+them in the same step. All of them create something in Confluence, so all of them need
+confirmation first. Only `create-page --draft` (the default for a single page, see the
+confluence-link skill) creates something nobody else sees yet.
 
 Single pages and folders are covered by the **confluence-link** skill. This file is the
 full reference, including `scaffold`, which has no skill of its own - deciding to stand up
@@ -10,7 +12,7 @@ a whole project tree is a process decision, not a sync one.
 ## create-page / create-folder
 
 ```
-conf.py create-page   <file.md> --parent <id> [--title T] [--space <id>|personal]
+conf.py create-page   <file.md> --parent <id> [--title T] [--space <id>|personal] [--draft]
 conf.py create-folder <dir>     --parent <id> [--title T] [--space <id>|personal]
 ```
 

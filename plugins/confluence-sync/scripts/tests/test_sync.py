@@ -73,7 +73,8 @@ class VaultTest(unittest.TestCase):
         return result, out.getvalue()
 
 
-class PullTests(VaultTest):
+class PullCase(VaultTest):
+    """A note synced at v7, and pull_one run on it."""
 
     def setUp(self):
         super().setUp()
@@ -93,6 +94,9 @@ class PullTests(VaultTest):
 
     def body(self):
         return frontmatter.split_frontmatter(self.note.read_text(encoding="utf-8"))[1]
+
+
+class PullTests(PullCase):
 
     def test_neither_side_changed_writes_nothing(self):
         self.remote = page(SYNCED, 7)
@@ -183,6 +187,45 @@ class PullTests(VaultTest):
         self.mapping_file.write_text(json.dumps(self.mapping), encoding="utf-8")
         with self.assertRaises(SystemExit):
             sync.cmd_resolve(Namespace(file=str(self.note)))
+
+
+class DraftPullTests(PullCase):
+    """The note's edits went up with push --draft on top of v7."""
+
+    def setUp(self):
+        super().setUp()
+        self.note.write_text(MINE, encoding="utf-8")
+        self.mapping[NOTE]["draft"] = {"on_version": 7, "hash": body_hash(MINE),
+                                       "sent_at": "2026-10-30 16:49", "fingerprints": ["x"]}
+        base.save_draft_base(PAGE_ID, MINE)
+
+    def test_unpublished_draft_is_left_alone_without_a_decision(self):
+        self.remote = page(SYNCED, 7)
+        ok, out, decisions = self.pull()
+        self.assertFalse(ok)
+        self.assertIn("not published yet", out)
+        self.assertEqual(decisions, [])
+
+    def test_published_draft_is_pulled_not_a_conflict(self):
+        reviewed = MINE.replace("140/90", "130/80")
+        self.remote = page(reviewed, 8)
+        ok, out, decisions = self.pull()
+        self.assertTrue(ok)
+        self.assertIn("draft was published as v8, +1 -1 lines changed", out)
+        self.assertIn("130/80", self.body())
+        self.assertEqual(self.mapping[NOTE]["version"], 8)
+        self.assertFalse(self.note.with_suffix(".remote.md").exists())
+        self.assertEqual(decisions, [])
+
+    def test_note_edited_after_the_draft_is_still_a_conflict(self):
+        self.note.write_text(MINE + "\nEncore une ligne.\n", encoding="utf-8")
+        self.remote = page(MINE, 8)
+        ok, out, decisions = self.pull()
+        self.assertFalse(ok)
+        self.assertIn("CONFLICT", out)
+        # Measured from the draft, not from v7: the published page is the draft.
+        self.assertIn("+2 -0", decisions[0])
+        self.assertIn("+0 -0 since your last sync", decisions[0])
 
 
 class FolderRenameTests(VaultTest):

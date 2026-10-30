@@ -5,7 +5,8 @@ description: >
   or folder, or creates the Confluence page/folder when it does not exist yet. This skill
   should be used when the user pastes a Confluence URL and wants a note attached to it, or
   says "link this note to that page", "connect this folder to Confluence", "find the page
-  called X", "this note should live at <URL>", "create a Confluence page for this note", or
+  called X", "this note should live at <URL>", "create a Confluence page for this note"
+  (created as an unpublished draft by default), or
   reports that a note is "not linked". It also covers looking up a page or folder id by
   title. For syncing content on already-linked notes, use confluence-pull or confluence-push
   instead.
@@ -53,15 +54,30 @@ looks plausible - never link to a guess.
 ## Create, when there is nothing to link to
 
 ```
-python3 ${CLAUDE_PLUGIN_ROOT}/scripts/conf.py create-page   <file.md> --parent <id> [--title T]
+python3 ${CLAUDE_PLUGIN_ROOT}/scripts/conf.py create-page   <file.md> --parent <id> [--title T] --draft
 python3 ${CLAUDE_PLUGIN_ROOT}/scripts/conf.py create-folder <dir>     --parent <id> [--title T]
 ```
 
 Both create the Confluence side, create or reuse the local side, and link them in one
 step. `--parent` takes a page id or a folder id.
 
-**Creating is publishing.** Before running either, state the target space, the parent, and
-the exact title, and get an explicit yes. Ask where it goes rather than guessing a parent;
+**A new page starts as a draft.** `create-page --draft` is the default: the page exists
+but nobody sees it until the user publishes it from the Confluence editor (the script
+prints the edit URL; give it to them). Leave out `--draft` only when the user asks for the
+page to be published straight away, and then confirm that in so many words: "this
+publishes a new page everyone in the space can see". Afterwards:
+
+- While it is a draft, `status` and `pull` report "still a draft in Confluence" and leave
+  the note alone. More edits go up with `push --draft` (confluence-push).
+- Once published, it is v1 and a plain `pull` takes it, with whatever was changed in the
+  editor. A plain `push` before that is refused with `FIRST PUSH: ...`.
+- Images upload to the draft page as usual.
+
+Folders have no draft state: `create-folder` always creates a visible folder. `scaffold`
+creates published pages too: its tree is the structure the team works in.
+
+**Creating is visible.** Before running either, state the target space, the parent, the
+exact title and, for a page, draft or published, and get an explicit yes. Ask where it goes rather than guessing a parent;
 if the user still won't say, fall back to `--space personal` and tell them that's what you
 did.
 

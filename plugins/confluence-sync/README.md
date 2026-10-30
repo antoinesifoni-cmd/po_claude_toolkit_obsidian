@@ -37,11 +37,12 @@ Claude runs these for you. Listed so you can see what the plugin can actually do
 | `status [file]` | compare local hash + remote version, for one file or all |
 | `pull <file>` / `pull --all` | fetch remote as Markdown. Never writes over unpushed edits; conflicts land in `<file>.remote.md` |
 | `push <file> -m "msg"` | publish, with a version message. Aborts if the remote moved |
+| `push <file> --draft` | send the note as unpublished changes on the page, to review and publish from the Confluence editor. A note's first push wants this or `--first-publish` |
 | `resolve <file>` | record that a conflict was merged into the note, so a normal push publishes it |
 | `find <title> [--space K]` | search Confluence by title, to get an id without leaving the editor |
 | `link <path> <url-or-id>` | map a note **or** folder to an existing page/folder, then pull it |
 | `link-folder <path> <url-or-id>` | alias for `link`, forced to folder |
-| `create-page <file> --parent <id>` | create a **new** page from a note, and link it |
+| `create-page <file> --parent <id> [--draft]` | create a **new** page from a note, and link it. `--draft` keeps it unpublished until you publish it in Confluence |
 | `create-folder <dir> --parent <id>` | create a **new** folder plus the local directory |
 | `scaffold <spec.yaml>` | create a whole nested tree in one pass |
 | `users <query> [--add]` | look up Confluence users for the `@mention` map |
