@@ -115,10 +115,11 @@ stays code. Custom hex colours (set in Confluence) snap to the closest dot on pu
   `https://<site>/wiki/display/SPACE/Page+Title`, which pushes back as a page link.
 - Smart links: a bare URL (`<https://...>`) to Jira, Confluence, Figma, Google Docs/Sheets/
   Drive or Lucid is pushed as an inline smart link. A link with its own text stays a normal
-  link. Jira links made from issue keys are smart links too, and come back as the bare key.
-  When Confluence has turned one into its older one-issue Jira macro, pull still brings back
-  the bare key (a key outside `jira_project_keys` comes back as a link to the issue). A Jira
-  macro that lists a search (JQL) stays kept.
+  link. Jira links made from issue keys are smart links too. Pull brings every Jira issue
+  back as `[PT-1794](https://<site>/browse/PT-1794)`, clickable in Obsidian, and push turns
+  that back into a smart link. This includes Confluence's older one-issue Jira macro, which
+  it sometimes stores instead of the smart link. A Jira macro that lists a search (JQL)
+  stays kept.
 - Jira keys inside URLs, link targets and code are left alone.
 
 ## Diagrams

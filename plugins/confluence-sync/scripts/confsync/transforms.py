@@ -959,10 +959,7 @@ def _card(el: Tag, ctx: _Pull) -> str:
 
 
 def _jira_key(key: str, ctx: _Pull) -> str:
-    """Bare key when push will link it again, else an explicit link to the issue."""
-    keys = ctx.cfg.get("jira_project_keys") or []
-    if key.split("-")[0] in keys:
-        return key
+    """A link Obsidian can open; push turns it back into a smart link."""
     return f"[{key}]({ctx.cfg['base_url']}/browse/{key})"
 
 
