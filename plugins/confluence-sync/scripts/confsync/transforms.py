@@ -807,6 +807,12 @@ def _macro(el: Tag, ctx: _Pull):
     if kind in SHORTHAND_MACROS and not params and block_ok:
         return f"%%confluence:{kind}%%", True
 
+    # Confluence turns pushed Jira smart links into the legacy one-issue macro on save.
+    key = params.get("key", "")
+    if (kind == "jira" and ctx.cfg and re.fullmatch(r"[A-Z][A-Z0-9]+-\d+", key)
+            and _harmless(params, ["key", "server", "serverId"])):
+        return _jira_key(key, ctx), False
+
     block = el.find_parent("p") is None and block_ok
     return _keep(el, ctx, block), block
 
@@ -946,11 +952,18 @@ def _link(el: Tag, ctx: _Pull):
 
 def _card(el: Tag, ctx: _Pull) -> str:
     href = el.get("href", "")
-    keys = (ctx.cfg or {}).get("jira_project_keys") or []
-    m = re.search(r"/browse/(([A-Z][A-Z0-9]+)-\d+)$", href)
+    m = re.search(r"/browse/([A-Z][A-Z0-9]+-\d+)$", href)
     if m and ctx.cfg and href == f"{ctx.cfg['base_url']}/browse/{m.group(1)}":
-        return m.group(1) if m.group(2) in keys else f"[{m.group(1)}]({href})"
+        return _jira_key(m.group(1), ctx)
     return f"<{href}>"
+
+
+def _jira_key(key: str, ctx: _Pull) -> str:
+    """Bare key when push will link it again, else an explicit link to the issue."""
+    keys = ctx.cfg.get("jira_project_keys") or []
+    if key.split("-")[0] in keys:
+        return key
+    return f"[{key}]({ctx.cfg['base_url']}/browse/{key})"
 
 
 def _emoji(el: Tag) -> str:

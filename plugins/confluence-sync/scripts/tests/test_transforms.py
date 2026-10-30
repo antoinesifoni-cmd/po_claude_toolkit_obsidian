@@ -284,6 +284,24 @@ class RegressionTests(ConverterTest):
                                    'ac:schema-version="1"></ac:structured-macro>'),
                          "%%confluence:toc%%\n")
 
+    def test_legacy_jira_macro_comes_back_as_the_key(self):
+        # What Confluence stores after it converts a pushed Jira smart link.
+        def macro(key):
+            return ('<ac:structured-macro ac:local-id="a1" ac:macro-id="b2" ac:name="jira" '
+                    f'ac:schema-version="1"><ac:parameter ac:name="key">{key}</ac:parameter>'
+                    '<ac:parameter ac:name="serverId">383d35c0</ac:parameter>'
+                    '<ac:parameter ac:name="server">System Jira</ac:parameter></ac:structured-macro>')
+        self.assertEqual(self.pull(f"<ul><li>Bug {macro('PT-31022')}, {macro('PT-31023')}</li></ul>"),
+                         "- Bug PT-31022, PT-31023\n")
+        self.assertEqual(self.pull(f"<p>{macro('MYLE-9')}</p>"),
+                         "[MYLE-9](https://exemple.atlassian.net/browse/MYLE-9)\n")
+        self.assertIn('href="https://exemple.atlassian.net/browse/PT-31022"', self.push("Bug PT-31022"))
+
+    def test_jira_query_macro_is_kept(self):
+        storage = ('<ac:structured-macro ac:name="jira"><ac:parameter ac:name="jqlQuery">'
+                   'project = PT</ac:parameter></ac:structured-macro>')
+        self.assertIn("%%confluence-keep:", self.pull(storage))
+
     def test_jira_key_inside_a_url_is_left_alone(self):
         md = "<https://exemple.atlassian.net/jira/board?selectedIssue=PT-1780>"
         self.assertNotIn("/browse/", self.push(md))
