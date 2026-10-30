@@ -27,6 +27,9 @@ def link_page(cfg, s, page_id, path: Path, mapping) -> str:
         "version": 0,  # force first pull/push to be deliberate
         "hash": local_body_hash(local) if local.exists() else "",
         "hash_algo": HASH_ALGO,
+        # Cleared by the first publish from this vault. Until then push wants --draft
+        # or --first-publish: the first push is where formatting gets flattened.
+        "never_pushed": True,
     }
 
     if local.exists():

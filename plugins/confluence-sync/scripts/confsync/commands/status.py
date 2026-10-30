@@ -6,9 +6,10 @@ touches mapping.json only and never contacts the site at all.
 
 from pathlib import Path
 
+from .. import drafts
 from ..config import MAPPING_FILE, VAULT, api, get_config, load_json, rel, save_json
 from ..hashing import HASH_ALGO, is_legacy, local_body_hash
-from ..rest import get_page_meta
+from ..rest import get_draft, get_page_body, get_page_meta
 
 
 def cmd_status(args):
@@ -30,6 +31,12 @@ def cmd_status(args):
         local = VAULT / f
         local_changed = not local.exists() or local_body_hash(local) != entry["hash"]
         meta = get_page_meta(cfg, s, entry["page_id"])
+        if meta.get("status") == "draft":
+            state = "new page, still a draft in Confluence (never published)"
+            if not drafts.sent_unchanged(entry, local):
+                state += "  [note edited since the draft was sent]"
+            print(f"{f}: v{entry['version']} local | draft remote -> {state}")
+            continue
         remote_v = meta["version"]["number"]
         remote_changed = remote_v != entry["version"]
         state = {
@@ -38,6 +45,10 @@ def cmd_status(args):
             (False, True): f"remote moved to v{remote_v} (pull needed)",
             (True, True): f"CONFLICT: local changes AND remote moved to v{remote_v}",
         }[(local_changed, remote_changed)]
+        if drafts.sent_unchanged(entry, local):
+            state = draft_state(cfg, s, entry, remote_v, remote_changed)
+        elif drafts.pending(entry):
+            state += f"  [draft sent {entry['draft']['sent_at']}, note edited since]"
         if is_legacy(entry):
             state += "  [legacy whole-file hash, run 'conf.py rebaseline']"
             legacy_seen = True
@@ -47,6 +58,21 @@ def cmd_status(args):
         print("\nSome entries still use the pre-0.4.0 whole-file hash, which counted"
               "\nfrontmatter reformatting as a local change. Review any 'push needed'"
               "\nabove, then run 'conf.py rebaseline' to switch them to body-only.")
+
+
+def draft_state(cfg, s, entry, remote_v, remote_changed):
+    """State of a note whose edits went up with push --draft and that is unchanged since."""
+    sent = entry["draft"]["sent_at"]
+    if remote_changed:
+        return f"remote moved to v{remote_v}, most likely your draft (sent {sent}) published (pull needed)"
+    draft = get_draft(cfg, s, entry["page_id"])
+    fp = draft and drafts.fingerprint(draft["body"]["storage"]["value"])
+    if fp == entry["draft"]["fingerprints"][0]:
+        return f"draft sent {sent}, not published yet"
+    published = get_page_body(cfg, s, entry["page_id"])["body"]["storage"]["value"]
+    if draft is None or fp == drafts.fingerprint(published):
+        return f"draft sent {sent} is gone from Confluence (discarded?) - local changes (push needed)"
+    return f"draft sent {sent}, edited in the Confluence editor since, not published yet"
 
 
 def cmd_rebaseline(args):

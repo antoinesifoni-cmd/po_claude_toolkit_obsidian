@@ -35,6 +35,10 @@ user has already picked it; this is how to carry it out.
    - `.confsync/base/<page_id>.md`: the page as it was at the last sync, the common
      ancestor. `page_id` is in the note's frontmatter.
 
+     Exception: if `status` showed `[draft sent ..., note edited since]`, the note went up
+     with `push --draft` and the page grew out of that draft. Then the ancestor is
+     `.confsync/base/<page_id>.draft.md`, the body that draft sent.
+
    The base is what makes the merge accurate. A paragraph that is in one version only was
    added on that side if the base lacks it, and deleted on the other side if the base has
    it. A note linked before 0.11.0 may have no base yet: say so, and treat every

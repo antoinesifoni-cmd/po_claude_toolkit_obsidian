@@ -7,7 +7,10 @@ in a tree, which is why they take an explicit space/parent instead of parsing ar
 import sys
 from pathlib import Path
 
-from ..base import save_base
+from datetime import datetime
+
+from .. import drafts
+from ..base import save_base, save_draft_base
 from ..config import (FOLDERS_FILE, MAPPING_FILE, api, get_config, load_json, rel,
                       save_json)
 from ..frontmatter import (apply_frontmatter, build_confluence_frontmatter,
@@ -40,7 +43,7 @@ def register_page(cfg, s, mapping, local: Path, page_meta, body_md: str, up_note
 
 
 def create_page_here(cfg, s, space_id, title, parent_id, local: Path, mapping,
-                     message=None, up_note=None):
+                     message=None, up_note=None, draft=False):
     """Create a Confluence page from a local note (or an empty one) and link the two.
 
     Pages carrying diagram fences or image embeds are created empty and then pushed,
@@ -52,6 +55,9 @@ def create_page_here(cfg, s, space_id, title, parent_id, local: Path, mapping,
     if local.exists():
         body_md = split_frontmatter(local.read_text(encoding="utf-8"))[1]
 
+    if draft:
+        return create_draft_page(cfg, s, space_id, title, parent_id, local, mapping, body_md)
+
     needs_id = needs_page_id(body_md)
     storage = "" if needs_id else md_to_storage(body_md, cfg, s, None, local)
     page = post_page(cfg, s, space_id, title, parent_id, storage)
@@ -62,6 +68,36 @@ def create_page_here(cfg, s, space_id, title, parent_id, local: Path, mapping,
         result = put_page(cfg, s, page["id"], title, storage, entry["version"] + 1,
                           message or "Initial content (confluence-sync)")
         entry = register_page(cfg, s, mapping, local, result, body_md, up_note)
+    return entry
+
+
+def create_draft_page(cfg, s, space_id, title, parent_id, local: Path, mapping, body_md):
+    """create-page --draft: a new page that stays unpublished until published in Confluence.
+
+    Linked like any created page, but at version 0 (nothing published), marked never
+    pushed, and with the same "draft" record push --draft writes (see drafts.py). Once
+    it is published, it is v1 and the next pull takes it like any published draft.
+    """
+    needs_id = needs_page_id(body_md)
+    storage = "" if needs_id else md_to_storage(body_md, cfg, s, None, local)
+    page = post_page(cfg, s, space_id, title, parent_id, storage, status="draft")
+    if needs_id:
+        storage = md_to_storage(body_md, cfg, s, page["id"], local)
+        page = put_page(cfg, s, page["id"], title, storage, page["version"]["number"], "",
+                        status="draft")
+    # No published version to show; the edit URL is the useful link while it is a draft.
+    meta = {**page, "version": {}, "_links": {"webui": (page.get("_links") or {}).get("edituiv2", "")}}
+    entry = register_page(cfg, s, mapping, local, {**meta, "version": {"number": 0}}, body_md)
+    fm = build_confluence_frontmatter(cfg, mapping, meta)
+    local.write_text(apply_frontmatter(body_md, read_local_frontmatter(local), fm), encoding="utf-8")
+    entry.update(never_pushed=True, draft={
+        "on_version": 0, "hash": body_hash(body_md),
+        "sent_at": datetime.now().strftime("%Y-%m-%d %H:%M"),
+        "fingerprints": [drafts.fingerprint(storage)],
+    })
+    save_draft_base(entry["page_id"], body_md)
+    save_json(MAPPING_FILE, mapping)
+    print(f"Review and publish it in Confluence: {drafts.edit_url(cfg, page)}")
     return entry
 
 
@@ -92,7 +128,11 @@ def cmd_create_page(args):
 
     space_id, parent_id = resolve_target(cfg, s, args.parent, args.space)
     title = args.title or local.stem
-    entry = create_page_here(cfg, s, space_id, title, parent_id, local, mapping, args.message)
+    entry = create_page_here(cfg, s, space_id, title, parent_id, local, mapping, args.message,
+                             draft=args.draft)
+    if args.draft:
+        print(f"created page \"{title}\" as a draft (id {entry['page_id']}), not published -> {f}")
+        return
     print(f"created page \"{title}\" (id {entry['page_id']}, v{entry['version']}) -> {f}")
 
 

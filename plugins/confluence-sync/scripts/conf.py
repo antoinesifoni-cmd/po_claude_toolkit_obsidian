@@ -6,11 +6,13 @@ Commands:
   status       [file]              Compare local files vs remote versions
   pull         <file|--all>        Download remote page(s) -> markdown (never over local edits)
   push         <file> -m "msg"     Upload local markdown -> Confluence (optimistic lock)
+  push         <file> --draft      Send it as unpublished changes, published from Confluence
   resolve      <file>              Record that a CONFLICT was merged into the note
   find         <title>             Search Confluence by title (to get an id to link)
   link         <path> <url|id>     Map a note/folder to an existing page/folder
   link-folder  <path> <url|id>     Alias for `link`, forced to folder
   create-page   <file>   --parent <id>  Create a NEW Confluence page from a local note
+  create-page   <file>   --draft        ... as an unpublished draft, published from Confluence
   create-folder <folder> --parent <id>  Create a NEW Confluence folder + local directory
   scaffold     <spec.yaml>         Create a whole folder/page tree in one pass
   rebaseline   [--check]           Migrate pre-0.4.0 whole-file hashes to body-only
@@ -27,6 +29,7 @@ State lives in <vault>/.confsync/:
   folders.json   { "<relative/folder/path>": {"folder_id": "...", "title": "...", "parent_id": "..."} }
   users.json     { "alias": {"account_id": "...", "display_name": "..."} }
   base/<page_id>.md  each page's body as of the last pull/push - the merge ancestor
+  base/<page_id>.draft.md  the body last sent by push --draft (see confsync/drafts.py)
 
 Keys in mapping.json and folders.json always use "/", on every OS. Files written on
 Windows by <=0.10.0 used "\\" and are rewritten on the next load (see config.vault_key).
@@ -87,6 +90,8 @@ Code layout - this file is only the argparse wiring; everything else is in confs
   commands/status.py    status, rebaseline          (read-only, never writes remotely)
   base.py         each page's last-synced body (the merge ancestor), line-change counts
 
+  drafts.py       push --draft: the page's editor draft, and when it counts as published
+
   commands/sync.py      pull, push, resolve         (the two directions content moves)
   commands/link.py      link, link-folder, find     (attach to pages that exist)
   commands/create.py    create-page, create-folder  (make new ones)
@@ -95,7 +100,7 @@ Code layout - this file is only the argparse wiring; everything else is in confs
 
 Dependencies run one way and stay shallow. config.py and rest.py import no siblings at
 all, so either can be read on its own; frontmatter -> config, hashing -> frontmatter,
-base -> config + frontmatter, transforms -> config + rest; and the command modules sit on top of all of them. Nothing
+base -> config + frontmatter, drafts -> hashing, transforms -> config + rest; and the command modules sit on top of all of them. Nothing
 under confsync/ imports a command module. The only command-to-command imports are
 link -> sync (link pulls straight after linking) and scaffold -> create (it creates each
 node in the tree).
@@ -152,6 +157,12 @@ def main():
 
     sp = sub.add_parser("push"); sp.add_argument("file")
     sp.add_argument("-m", "--message", default=None); sp.add_argument("--force", action="store_true")
+    sp.add_argument("--draft", action="store_true",
+                    help="send as unpublished changes, to review and publish in Confluence")
+    sp.add_argument("--replace-draft", action="store_true",
+                    help="with --draft: replace unpublished edits already in the page's draft")
+    sp.add_argument("--first-publish", action="store_true",
+                    help="publish a note never pushed from here directly, without a draft first")
     sp.set_defaults(fn=cmd_push)
 
     sp = sub.add_parser("resolve", help="record that a CONFLICT was merged into the note")
@@ -163,6 +174,8 @@ def main():
     sp = sub.add_parser("create-page"); sp.add_argument("file")
     sp.add_argument("--parent", default=None); sp.add_argument("--space", default=None)
     sp.add_argument("--title", default=None); sp.add_argument("-m", "--message", default=None)
+    sp.add_argument("--draft", action="store_true",
+                    help="create it unpublished, to review and publish in Confluence")
     sp.set_defaults(fn=cmd_create_page)
 
     sp = sub.add_parser("create-folder"); sp.add_argument("folder")

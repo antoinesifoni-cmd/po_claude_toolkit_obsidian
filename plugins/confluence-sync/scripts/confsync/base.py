@@ -34,6 +34,22 @@ def load_base(page_id):
     return p.read_text(encoding="utf-8") if p.exists() else None
 
 
+# The body last sent by `push --draft`. Until that draft is published it is a better
+# ancestor than the base: the published version grows out of it, not out of the base.
+def draft_base_path(page_id):
+    return BASE_DIR / f"{page_id}.draft.md"
+
+
+def save_draft_base(page_id, text: str):
+    BASE_DIR.mkdir(parents=True, exist_ok=True)
+    draft_base_path(page_id).write_text(normalize(text), encoding="utf-8")
+
+
+def load_draft_base(page_id):
+    p = draft_base_path(page_id)
+    return p.read_text(encoding="utf-8") if p.exists() else None
+
+
 def line_changes(old: str, new: str) -> str:
     """'+added -removed' lines from old to new, bodies only."""
     a, b = normalize(old).splitlines(), normalize(new).splitlines()

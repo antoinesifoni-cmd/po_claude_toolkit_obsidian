@@ -8,13 +8,14 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-from ..base import line_changes, load_base, save_base
+from .. import drafts
+from ..base import line_changes, load_base, load_draft_base, save_base, save_draft_base
 from ..config import (FOLDERS_FILE, MAPPING_FILE, VAULT, api, get_config, is_under,
                       load_json, rel, save_json)
 from ..frontmatter import (apply_frontmatter, build_confluence_frontmatter,
                            read_local_frontmatter, split_frontmatter)
 from ..hashing import HASH_ALGO, body_hash, local_body_hash
-from ..rest import get_folder_meta, get_page_body, get_page_meta, put_page
+from ..rest import get_draft, get_folder_meta, get_page_body, get_page_meta, put_page, user_name
 from ..transforms import md_to_storage, storage_to_md
 
 
@@ -74,7 +75,8 @@ def sync_folders(cfg, s):
 
 def describe(f, local, entry, page, remote_md, fm_fields, conflict):
     """One row of the decision table the pull skill shows for a note it left alone."""
-    base = load_base(entry["page_id"])
+    # A pending draft is what the published version grew out of, so it is the ancestor.
+    base = (drafts.pending(entry) and load_draft_base(entry["page_id"])) or load_base(entry["page_id"])
     local_text = local.read_text(encoding="utf-8")
     if base is not None:
         yours = line_changes(base, local_text)
@@ -122,6 +124,9 @@ def pull_one(cfg, s, mapping, f, force=False, decisions=None, create_dirs=False)
         return False
 
     page = get_page_body(cfg, s, entry["page_id"])
+    if page.get("status") == "draft":
+        print(f"{f}: new page, still a draft in Confluence (never published) - skipped")
+        return False
     remote_v = page["version"]["number"]
     fm_fields = build_confluence_frontmatter(cfg, mapping, page)
     remote_md = storage_to_md(page["body"]["storage"]["value"], cfg, s, entry["page_id"],
@@ -130,6 +135,16 @@ def pull_one(cfg, s, mapping, f, force=False, decisions=None, create_dirs=False)
     local_changed = local.exists() and local_body_hash(local) != entry["hash"]
     remote_changed = remote_v != entry["version"]
     existing_fm = read_local_frontmatter(local)
+
+    # The note's edits went up as a draft and the note is untouched since. If the page
+    # moved, that is the draft being published: take the published version, which has
+    # those edits plus whatever was changed in the editor before publishing.
+    draft_published = False
+    if drafts.sent_unchanged(entry, local) and not force:
+        if not remote_changed:
+            print(f"{f}: draft sent {entry['draft']['sent_at']}, not published yet - skipped")
+            return False
+        local_changed, draft_published = False, True
 
     if local_changed and not force:
         if remote_changed:
@@ -155,9 +170,20 @@ def pull_one(cfg, s, mapping, f, force=False, decisions=None, create_dirs=False)
     entry.update(version=remote_v, hash=body_hash(final_text),
                  hash_algo=HASH_ALGO, title=page["title"])
     entry.pop("conflict_version", None)
+    if draft_published:
+        # Publishing leaves the published text in the draft: it is no one's pending edit.
+        entry.pop("never_pushed", None)  # the draft was its first publish
+        entry["draft"]["fingerprints"].append(drafts.fingerprint(page["body"]["storage"]["value"]))
     save_base(entry["page_id"], final_text)
     save_json(MAPPING_FILE, mapping)
-    print(f"{f}: pulled v{remote_v} (\"{page['title']}\")")
+    if draft_published:
+        sent = load_draft_base(entry["page_id"])
+        changes = line_changes(sent, final_text) if sent is not None else "+0 -0"
+        edited = "" if changes == "+0 -0" else (
+            f", {changes} lines changed in Confluence before publishing")
+        print(f"{f}: your draft was published as v{remote_v}{edited} - note updated to match")
+    else:
+        print(f"{f}: pulled v{remote_v} (\"{page['title']}\")")
     return True
 
 
@@ -219,18 +245,33 @@ def cmd_push(args):
 
     meta = get_page_meta(cfg, s, entry["page_id"])
     remote_v = meta["version"]["number"]
-    if remote_v != entry["version"] and not args.force:
+    # Created with create-page --draft and never published: no version to lock against,
+    # and publishing it makes it v1.
+    unpublished = meta.get("status") == "draft"
+    if not unpublished and remote_v != entry["version"] and not args.force:
         sys.exit(
             f"ABORT: remote is v{remote_v} but you last synced v{entry['version']}."
             f"\nSomeone edited the page. Run 'conf.py pull {f}' first, merge, then push."
             f"\n(--force overrides, clobbering their changes - use with care)"
         )
 
+    if args.draft:
+        return push_draft(cfg, s, mapping, f, entry, local, args)
+    if entry.get("never_pushed") and not args.first_publish:
+        why = ("it is a new page nobody has seen yet" if unpublished else
+               "a first push can flatten what the page had (table colours, merged cells, text colour)")
+        sys.exit(
+            f"FIRST PUSH: {f} was never pushed to \"{meta['title']}\" from here, and"
+            f"\n{why}."
+            f"\nSend it as a draft to check it in Confluence: conf.py push {f} --draft"
+            f"\nor publish it directly: conf.py push {f} --first-publish -m \"...\""
+        )
+
     existing_fm, md_text = split_frontmatter(local.read_text(encoding="utf-8"))
     storage = md_to_storage(md_text, cfg, s, entry["page_id"], local)
     message = args.message or "Updated via confluence-sync"
     result = put_page(cfg, s, entry["page_id"], entry.get("title") or meta["title"],
-                      storage, remote_v + 1, message)
+                      storage, 1 if unpublished else remote_v + 1, message)
 
     fm_fields = build_confluence_frontmatter(cfg, mapping, result)
     final_text = apply_frontmatter(md_text, existing_fm, fm_fields)
@@ -239,6 +280,64 @@ def cmd_push(args):
     entry.update(version=result["version"]["number"], hash=body_hash(final_text),
                  hash_algo=HASH_ALGO)
     entry.pop("conflict_version", None)
+    entry.pop("never_pushed", None)
+    if entry.get("draft"):
+        refresh_old_draft(cfg, s, entry, storage, meta["title"])
     save_base(entry["page_id"], final_text)
     save_json(MAPPING_FILE, mapping)
     print(f"{f}: pushed as v{result['version']['number']} - \"{message}\"")
+
+
+def push_draft(cfg, s, mapping, f, entry, local, args):
+    """push --draft: send the note as the page's unpublished draft. See drafts.py.
+
+    The note, its frontmatter, the version and the base all stay as they are: nothing
+    was published. Only the "draft" record in the mapping entry is written.
+    """
+    page = get_page_body(cfg, s, entry["page_id"])
+    draft = get_draft(cfg, s, entry["page_id"])
+    published = "" if page.get("status") == "draft" else page["body"]["storage"]["value"]
+    if drafts.foreign(entry, draft, published) and not args.replace_draft:
+        author = draft["version"].get("authorId")
+        who = user_name(cfg, s, author) if author else "?"
+        sys.exit(
+            f"UNPUBLISHED EDITS: the page already has a draft that is not published and was"
+            f"\nnot sent from this note (last saved {draft['version'].get('createdAt', '?')[:16]}"
+            f" UTC by {who}). A draft push would replace it."
+            f"\nLook at it first: {drafts.edit_url(cfg, page)}"
+            f"\nRe-run with --replace-draft to replace it anyway."
+        )
+
+    _, md_text = split_frontmatter(local.read_text(encoding="utf-8"))
+    storage = md_to_storage(md_text, cfg, s, entry["page_id"], local)
+    put_page(cfg, s, entry["page_id"], entry.get("title") or page["title"], storage,
+             draft["version"]["number"] if draft else 1, "", status="draft")
+
+    entry["draft"] = {
+        "on_version": entry["version"], "hash": body_hash(md_text),
+        "sent_at": datetime.now().strftime("%Y-%m-%d %H:%M"),
+        "fingerprints": [drafts.fingerprint(storage)],
+    }
+    save_draft_base(entry["page_id"], md_text)
+    save_json(MAPPING_FILE, mapping)
+    print(f"{f}: sent as a draft on top of v{entry['version']} - nothing published."
+          f"\nReview and publish it in Confluence: {drafts.edit_url(cfg, page)}")
+
+
+def refresh_old_draft(cfg, s, entry, storage, title):
+    """After a publish, overwrite a draft this tool sent earlier with what was published.
+
+    Publishing through the API leaves the draft as it was, so the editor could still offer
+    the older text, and publishing that would undo this push. A draft someone edited since
+    is left alone, with a warning.
+    """
+    draft = get_draft(cfg, s, entry["page_id"])
+    if draft is None:
+        return
+    if not drafts.known(entry, drafts.fingerprint(draft["body"]["storage"]["value"])):
+        print(f"  ! The page also has unpublished edits in its editor draft, left as is."
+              f"\n    Check them in the editor: {drafts.edit_url(cfg, draft)}")
+        return
+    put_page(cfg, s, entry["page_id"], title, storage, draft["version"]["number"], "",
+             status="draft")
+    entry["draft"]["fingerprints"] = [drafts.fingerprint(storage)]
