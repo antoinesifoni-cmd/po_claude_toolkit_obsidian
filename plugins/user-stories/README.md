@@ -6,7 +6,7 @@ Claude Code session, and in Claude with the same skill uploaded.
 ## us-craft
 
 Give Claude a rough draft or a one-line ticket and get back a finished story in the
-Antoine template. Say "pimp my US MYLE-123", "make this a proper story" with a draft
+Antoine template. Say "craft MYLE-123", "make this a proper story" with a draft
 pasted, or "mets cette US au propre" with the note open.
 
 ### What it does
