@@ -37,7 +37,7 @@ pasted, or "mets cette US au propre" with the note open.
 |---|---|---|
 | The questions before writing | Your answers become scenarios | "Just write it": best guesses, listed for you after the story |
 | A split | It writes every story, each naming the others in Out of scope | One story, with all its scenarios |
-| "Put it in MYLE-123's description?" | The description is replaced (Jira keeps the old one in its history). Nothing else on the ticket changes | Jira is untouched. Copy the story yourself |
+| "Put it in MYLE-123 (title and description)?" | The story's title becomes the ticket's title and the rest replaces the description (Jira keeps the old ones in its history). Nothing else on the ticket changes | Jira is untouched. Copy the story yourself |
 | "...and create the other stories, linked to it?" (after a split) | New stories in the same project and parent, all linked "relates to", keys added to each Out of scope | Nothing is created |
 | "Put it in the note?" | Only that draft in the note is replaced | The note is untouched |
 
