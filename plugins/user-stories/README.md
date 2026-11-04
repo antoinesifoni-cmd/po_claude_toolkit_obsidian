@@ -25,7 +25,7 @@ pasted, or "mets cette US au propre" with the note open.
      the product's states (offline, in progress), cancel and close, and who is
      refused when patient data or roles are involved,
    - "I navigate to" for a screen change, "I see" for new information on the screen,
-   - Out of scope (what other stories cover), Mocks, a Vocab Table holding every UI
+   - Out of scope (what other stories cover), Mocks (every Figma link it found), a Vocab Table holding every UI
      text in EN, FR and ES, and related references.
 5. **Shows you the result:** the story, then a short "For you, not for the ticket"
    list (assumptions, suggested translations, empty cells). Questions never go in the
