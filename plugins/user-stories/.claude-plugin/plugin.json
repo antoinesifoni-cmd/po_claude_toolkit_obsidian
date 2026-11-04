@@ -1,6 +1,6 @@
 {
   "name": "user-stories",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "User story tools for a Product Owner, not tied to Obsidian. us-craft turns a rough draft or a one-line Jira ticket (by key, URL, note or pasted text) into a finished story in the Antoine template. It reads the Jira, Confluence and Figma context (parent epic, related stories, the feature page, the mocks), asks the PO what is still open, proposes a split when the story is too big, then writes: specific role, one goal, short behavior-only Gherkin scenarios with error, state and permission cases, Medfar healthcare checks, Out of scope and a Vocab Table holding every UI text in EN, FR and ES. Questions never go in the ticket. It writes to Jira or the note only after a yes.",
   "author": {
     "name": "Antoine Sifoni"

@@ -150,22 +150,24 @@ Before answering, go through the guide once more and fix the story:
    assumptions you made, Vocab Table cells still empty, a split you suggest, a missing
    Figma link. Omit when empty.
 4. One last line, only when the story came from Jira or a file: "Want me to put it in
-   MYLE-123's description?" or "Want me to put it in the note?". After a split, add
+   MYLE-123 (title and description)?" or "Want me to put it in the note?". After a split, add
    "and create the 2 other stories, linked to it?".
 
 No findings list, no score, no explanation of every change.
 
 ## 7. Save it (only when the user says so)
 
-- **Jira:** show which ticket, say the current description is overwritten (Jira keeps
-  it in the history), and wait for an explicit yes. Then `editJiraIssue` with the story
-  as the description: item 2 only, never the "For you" list. Never change anything
-  else on the issue: no transition, assignee, estimate, label or summary, unless the
-  user asks for the summary to take the new title.
+- **Jira:** show which ticket, say the summary takes the story's title and the current
+  description is overwritten (Jira keeps both in the history), and wait for an
+  explicit yes. Then one `editJiraIssue`:
+  - summary: the story's `#` title, without the `#`,
+  - description: the story from item 2 without that title line, starting at the
+    italic draft sentence. Never the "For you" list.
+  Never change anything else on the issue: no transition, assignee, estimate or label.
 - **Split stories:** list what will be created first (titles, project, parent) and
   wait for an explicit yes. Then for each new story: `createJiraIssue` in the same
-  project, type Story, same parent, the story's title as summary and the story as
-  description. Then link every story of the split to each other with `createIssueLink`,
+  project, type Story, same parent, the story's title as summary and the story without
+  its title line as description. Then link every story of the split to each other with `createIssueLink`,
   type "Relates" (check the name with `getIssueLinkTypes`). Then replace the titles in
   each Out of scope with the new keys, with `editJiraIssue`. Report the keys.
 - **File or note:** Edit that draft only, never the rest of the note. After a split,
