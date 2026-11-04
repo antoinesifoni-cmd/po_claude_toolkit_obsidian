@@ -8,6 +8,7 @@ documentation workbench with Confluence as the company source of truth.
 /plugin marketplace add antoinesifoni-cmd/po_claude_toolkit_obsidian
 /plugin install confluence-sync@po-claude-toolkit
 /plugin install daily-note@po-claude-toolkit
+/plugin install user-stories@po-claude-toolkit
 ```
 
 To pick up a new version later, refresh the marketplace first, then update — a plugin
@@ -24,6 +25,7 @@ Restart Claude Code afterwards to load it.
 |---|---|
 | confluence-sync | Two-way sync between vault Markdown and Confluence pages — pull, push, conflict detection — plus creation of new pages, folders, and whole project trees from a template. Panels, decisions, tasks, statuses, images and page links that round-trip, Jira smart links, real user mentions, Mermaid and PlantUML diagrams. |
 | daily-note | Morning and evening routines. `/daily-note:start-my-day` builds today's daily note: a short bullet Summary, an Alert list of Confluence pages that moved, and one heading per meeting from Google Calendar. `/daily-note:end-my-day` completes it: missing meetings, transcript links with a short recap, project tags, `text-corrector` fixes, a short bullet End of day and a Review list. Say "fetch resume of this meet" to recap one meeting, or "make a note for this task" to give a task a note of its own, linked in the task line. Tasks marked `#note` get theirs at end of day. |
+| user-stories | Works anywhere, not only in Obsidian. Say "pimp my US MYLE-123" (or paste a draft, or open its note) and `us-craft` turns it into a finished story in the template. It reads the parent epic, related stories, the Confluence feature page and Figma, asks you what is still open, and proposes a split when the story is too big. Questions never go in the ticket. Writes to Jira only after your yes. |
 
 See each plugin's README for setup.
 
