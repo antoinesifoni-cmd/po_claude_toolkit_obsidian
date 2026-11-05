@@ -60,8 +60,9 @@ Claude runs these for you. Listed so you can see what the plugin can actually do
   the vault, and links every node. Idempotent, so a run that dies halfway is fixed by
   re-running the same command.
 - **A project template.** The Medfar project tree ships as `templates/project.yaml`:
-  variables for the Jira key and project name, an optional per-team split, Obsidian-only
-  nodes (`CLAUDE.md`), and frontmatter tags applied to every note.
+  variables for the Jira key and project name, a project-level Meeting Notes folder (the
+  reviews, plus one Handoff per team), an optional per-team split into PO Conception and
+  Dev folders, Obsidian-only nodes (`CLAUDE.md`), and frontmatter tags applied to every note.
 - **Project docs stay current.** After a push that changes scope, decisions, teams, Jira
   epics, dates or the folder structure, Claude proposes short edits to the project's Read
   Me and CLAUDE.md (Yes / No / Only CLAUDE.md). On Yes it edits both and pushes the Read
