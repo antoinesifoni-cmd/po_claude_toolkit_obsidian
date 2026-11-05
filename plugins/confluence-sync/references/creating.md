@@ -92,8 +92,10 @@ dry run instead of producing a half-empty title.
 **`when`.** `single_team` or `multi_team` drops a node and its subtree in the other mode.
 Needed because a collapsing wrapper splices into its *immediate* parent, so a node that
 belongs at a different depth once the wrapper disappears can't be expressed by placement
-alone - write it twice and gate each copy. `project.yaml` doesn't need it: everything
-per-team sits inside the team folder, so collapsing puts it at project level.
+alone - write it twice and gate each copy. `project.yaml` uses it for Handoff: one page
+per team (`{team} - Handoff`, a `repeat_per_team` page) sitting in the shared Meeting
+Notes folder, and a plain `Handoff` page with a single team, since a page has no children
+to collapse into.
 
 **`target`.** `both` (default) creates in Confluence and the vault. `obsidian` creates a
 local note only - never pushed, never linked, absent from `mapping.json`. Use it for
@@ -125,6 +127,12 @@ Collect four things, asking for whatever wasn't in the prompt in **one** batch:
 | `name` | Project name without the key, e.g. `CNESST, Obstetrical Files`. |
 | `parent` | Confluence page or folder id the project nests under. |
 | `teams` | Omit for single-team. Otherwise the list, e.g. `Charting, L&D Rx`. |
+
+The tree: Read Me, CLAUDE.md (Obsidian only), a project-level Meeting Notes folder (Scope
+Review, Product Preliminary / Internal / Detail Review, and one Handoff per team), one
+folder per team holding a folder per profession (PO Conception with Analysis, and Dev),
+and the Release plan. The meetings are the minimum: other meetings, including any
+mandatory dev meetings, go in Meeting Notes with `create-page`.
 
 Real projects live under a product page in the PD space (`MYLE`, `CareWay`,
 `Careway Mobile`), so offering those is usually right.

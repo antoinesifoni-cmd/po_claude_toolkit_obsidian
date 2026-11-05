@@ -12,9 +12,14 @@
 # Bodies are headings only, no tables - they are read in Obsidian far more often than
 # in Confluence, and markdown tables render poorly there. Customise per page later.
 #
-# Each team gets a "{team}" folder holding Conception (Meeting Notes + PO Conception)
-# and Dev. With a single team that wrapper collapses into the project folder, so
-# Conception and Dev sit directly under the project - no `when:` gating needed.
+# Meeting Notes sits at project level: the reviews are about the whole project. The
+# pages below are the minimum; add other meetings (including future mandatory dev
+# meetings) to that folder. Handoff is the exception: one per team, still in Meeting
+# Notes, titled "{key} - {team} - Handoff". With a single team it is just "Handoff".
+#
+# Each team gets a "{team}" folder holding one folder per profession: PO Conception and
+# Dev. With a single team that wrapper collapses into the project folder, so both sit
+# directly under the project.
 
 variables:
   key: ""                      # required, e.g. PT-534
@@ -69,93 +74,98 @@ tree:
             run `conf.py status` before editing to check nothing moved upstream
 
       - type: folder
+        title: "Meeting Notes"
+        children:
+          - type: page
+            title: "Scope Review"
+            body: |
+              ## Attendees
+
+              ## In scope
+
+              ## Out of scope
+
+              ## Decisions
+
+              ## Action items
+          - type: page
+            title: "Product Preliminary Review"
+            body: |
+              ## Attendees
+
+              ## Summary
+
+              ## Risks and assumptions
+
+              ## Decisions
+
+              ## Action items
+          - type: page
+            title: "Product Internal Review"
+            body: |
+              ## Attendees
+
+              ## Summary
+
+              ## Feedback
+
+              ## Decisions
+
+              ## Action items
+          - type: page
+            title: "Product Detail Review"
+            body: |
+              ## Attendees
+
+              ## Detailed behaviour
+
+              ## Edge cases
+
+              ## Decisions
+
+              ## Action items
+
+          # Handoff: one per team, but kept here with the other meetings. Written twice
+          # because a per-team page has nothing to collapse into with a single team.
+          - type: page
+            title: "Handoff"
+            when: single_team
+            body: &handoff |
+              ## Attendees
+
+              ## Scope recap
+
+              ## User Stories
+
+              ## Open questions
+
+              ## Action items
+          - type: page
+            title: "{team} - Handoff"
+            when: multi_team
+            repeat_per_team: true
+            body: *handoff
+
+      - type: folder
         title: "{team}"
         repeat_per_team: true
         children:
 
           - type: folder
-            title: "Conception"
+            title: "PO Conception"
             children:
+              - type: page
+                title: "Analysis"
+                body: |
+                  ## Problem
 
-              - type: folder
-                title: "Meeting Notes"
-                children:
-                  - type: page
-                    title: "Scope Review"
-                    body: |
-                      ## Attendees
+                  ## Who is affected
 
-                      ## In scope
+                  ## Current workaround
 
-                      ## Out of scope
+                  ## Hypotheses
 
-                      ## Decisions
-
-                      ## Action items
-                  - type: page
-                    title: "Product Preliminary Review"
-                    body: |
-                      ## Attendees
-
-                      ## Summary
-
-                      ## Risks and assumptions
-
-                      ## Decisions
-
-                      ## Action items
-                  - type: page
-                    title: "Product Internal Review"
-                    body: |
-                      ## Attendees
-
-                      ## Summary
-
-                      ## Feedback
-
-                      ## Decisions
-
-                      ## Action items
-                  - type: page
-                    title: "Product Detail Review"
-                    body: |
-                      ## Attendees
-
-                      ## Detailed behaviour
-
-                      ## Edge cases
-
-                      ## Decisions
-
-                      ## Action items
-                  - type: page
-                    title: "Handoff"
-                    body: |
-                      ## Attendees
-
-                      ## Scope recap
-
-                      ## User Stories
-
-                      ## Open questions
-
-                      ## Action items
-
-              - type: folder
-                title: "PO Conception"
-                children:
-                  - type: page
-                    title: "Analysis"
-                    body: |
-                      ## Problem
-
-                      ## Who is affected
-
-                      ## Current workaround
-
-                      ## Hypotheses
-
-                      ## Open questions
+                  ## Open questions
 
           - type: folder
             title: "Dev"
