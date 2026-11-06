@@ -41,16 +41,16 @@ This list is the only place the order lives. To add, move or remove a step, edit
 5. Run these steps in order. Read `<Steps folder>/<step>.md` just before running it.
    1. `meetings`
    2. `unscheduled`
-   3. **Meeting map:** run the Script with `map`. It applies the Meeting map in the daily notes folder's `CLAUDE.md` to `meetings.json`, and writes `review-map.md`. If it fails, remember its message and go on.
+   3. **Meeting map:** run the Script with `map`. It applies the Meeting map in the daily notes folder's `CLAUDE.md` to `meetings.json`, and writes `review-map.json`. If it fails, remember its message and go on.
    4. `recap`, for every meeting in `meetings.json` that has a `doc`
    5. `notes`
    6. `decisions`
    7. `tags`
    8. `waiting`
    9. `review-loose-ends`
-   10. `review-claude-md`
-   11. `correct`
-   12. `wrapup`
+   10. `correct`
+   11. `wrapup`
+   12. `review-claude-md`, last, so it sees the whole day
 6. **End:** run the Script with `close`. It writes the note, then opens it in Obsidian.
 7. **Review.** When `close` returns `review` above 0, give the final report first, then ask once: "Review: <N> items. Do you have time for the review now?" Yes: run the `daily-note:review` skill, with the same `--date` for a past day. Later: stop, the list stays in the note, and "do the review" picks it up today. With 0 items, no question.
 
