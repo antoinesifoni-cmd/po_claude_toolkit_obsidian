@@ -4,9 +4,9 @@ description: >
   End-of-day routine for Antoine's Obsidian vault. Gives a note to each task marked #note,
   after his yes. Completes today's daily note (missing meetings, meetings recorded but not on the calendar, project tags, transcript
   links with a short recap, the notes created or edited today), corrects his writing with
-  text-corrector, refreshes what waits on him, adds an End of day summary and a Review list, then opens the note. Runs only when invoked by name.
+  text-corrector, catches the decisions made on Slack today, refreshes what waits on him, adds an End of day summary and a Review list, then opens the note. Runs only when invoked by name.
 disable-model-invocation: true
-allowed-tools: Edit(.daily-note/run/**), mcp__claude_ai_Google_Calendar__list_events, mcp__claude_ai_Gmail__search_threads, mcp__claude_ai_Gmail__get_message, mcp__claude_ai_Google_Drive__get_file_metadata, mcp__claude_ai_Google_Drive__read_file_content, mcp__claude_ai_Atlassian__searchJiraIssuesUsingJql, mcp__claude_ai_Slack__slack_search_public_and_private, mcp__claude_ai_Slack__slack_read_thread, mcp__claude_ai_Slack__slack_read_channel, mcp__claude_ai_Atlassian__searchConfluenceUsingCql, mcp__claude_ai_Atlassian__atlassianUserInfo
+allowed-tools: Edit(.daily-note/run/**), mcp__claude_ai_Google_Calendar__list_events, mcp__claude_ai_Gmail__search_threads, mcp__claude_ai_Gmail__get_message, mcp__claude_ai_Google_Drive__get_file_metadata, mcp__claude_ai_Google_Drive__read_file_content, mcp__claude_ai_Atlassian__searchJiraIssuesUsingJql, mcp__claude_ai_Slack__slack_search_public_and_private, mcp__claude_ai_Slack__slack_read_thread, mcp__claude_ai_Slack__slack_read_channel, mcp__claude_ai_Slack__slack_search_channels, mcp__claude_ai_Atlassian__searchConfluenceUsingCql, mcp__claude_ai_Atlassian__atlassianUserInfo
 ---
 
 # End my day
@@ -31,12 +31,13 @@ This list is the only place the order lives. To add, move or remove a step, edit
    3. **Meeting map:** run the Script with `map`. It applies the Meeting map in the daily notes folder's `CLAUDE.md` to `meetings.json`, and writes `review-map.md`. If it fails, remember its message and go on.
    4. `recap`, for every meeting in `meetings.json` that has a `doc`
    5. `notes`
-   6. `tags`
-   7. `waiting`
-   8. `review-loose-ends`
-   9. `review-claude-md`
-   10. `correct`
-   11. `wrapup`
+   6. `decisions`
+   7. `tags`
+   8. `waiting`
+   9. `review-loose-ends`
+   10. `review-claude-md`
+   11. `correct`
+   12. `wrapup`
 6. **End:** run the Script with `close`. It writes the note, then opens it in Obsidian.
 
 ## Rules for the whole run
@@ -53,7 +54,7 @@ This list is the only place the order lives. To add, move or remove a step, edit
 
 ## Final report
 
-At most 12 lines, from the step results and the `close` output. Example:
+At most 13 lines, from the step results and the `close` output. Example:
 
 ```
 Day2Day notes/2026-09-23 closed and opened.
@@ -63,6 +64,7 @@ Day2Day notes/2026-09-23 closed and opened.
 - map: 2 skipped, 1 tagged by the map, 1 to map
 - recap: 3 added
 - notes: 2 added, 1 already linked
+- decisions: 2 found in 9 threads, 1 unsure
 - tags: 1 added (Design check-in, PT-2402), 1 unsure
 - waiting: 3 open, 2 answered today
 - review: 2 loose ends, 1 CLAUDE.md to update

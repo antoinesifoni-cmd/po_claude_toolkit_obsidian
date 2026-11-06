@@ -27,8 +27,9 @@ since asking is the whole point.
   oldest first, 10 lines at most. Each line has the source, where, who, what they need in a
   few words, the project tag when clear, its age and its links:
   - **Slack:** mentions in channels and group DMs. 1:1 DMs are left out. A mention you
-    replied to after it, or that the thread already settled, is not listed. Thanks, kudos,
-    FYI and cc are skipped.
+    replied to after it, reacted to with 👍 ✅ ✔️ 👌 💯, or that the thread already settled, is
+    not listed. Thanks, kudos, FYI and cc are skipped. A channel listed for a project gives
+    its tag.
   - **Confluence and Jira:** the "mentioned you" emails, in all mail. Gone once you
     commented on the page or the ticket after it.
   - **Google Docs:** comment emails, until they age out, and "shared with you" emails, on
@@ -61,6 +62,19 @@ since asking is the whole point.
   the same day shows once, at its creation time. The times come from the `Created` and
   `Updated` properties AutoDater keeps. Daily notes, AutoDater's excluded folders and notes
   already linked in today's note are left out.
+- **Slack decisions:** each product decision made on Slack today, as one line:
+  `- ⚖️ **Decided (Slack):** load test dropped, the 2 min check is enough #PT-1760 MYLE-30537 [thread](...)`.
+  What was decided in 20 words at most, in English whatever the language of the thread,
+  its project tag, the Jira key when the thread names one, and the link. It goes at the end
+  of the meeting or note section of the same project, else in a `# Decisions` section
+  after the others. Decisions are scope in or out, a ticket, test or feature dropped or
+  kept, a choice ("we go with A", "flag OFF in prod"), a go or no-go. Read from:
+  - **the tracked channels:** those of the ongoing projects (tagged in a daily note in the
+    last 14 days) and your general list, whoever decided
+  - **any other channel or group DM,** only in a thread you wrote in today, or reacted to
+    with 👍 ✅ ✔️ 👌 💯
+  - An unsure thread is a **Decision?** in the Review instead. A decision with a Jira key
+    gets a **Jira?** line, and the CLAUDE.md check sees the decisions. 1:1 DMs are left out.
 - **Project tags:** a `#PT-xxxx` tag on each section clearly about one project that has
   none, and on each meeting the Meeting map names a project. An unsure case is flagged
   instead. A mixed meeting is never tagged.
@@ -104,6 +118,29 @@ A meeting seen 3 times or more in the last 3 weeks, mostly untagged and not in t
 comes up as **Map?** in the Review. `daynote.py seen`, run from the vault root, lists the
 meetings of the last 3 weeks with how often each was tagged, to start or grow the table.
 The file is context, so it never shows as a note of the day.
+
+### Slack channels
+
+- **A project's channels and group DMs:** one `Slack:` line in the project's `CLAUDE.md`,
+  in `Confluence Projects/<id> - <name>/`. A channel by its name, a group DM by its id,
+  with a label to recognize it:
+
+  ```markdown
+  Slack: #pt1760-patient-clinical-alerts, #pt-1760-po, C0BGDLJ7EUB (Greenbelt group)
+  ```
+
+- **General channels to track:** a `## Slack channels` section in the daily notes
+  folder's `CLAUDE.md`, one bullet each, with an optional note after ` · `:
+
+  ```markdown
+  ## Slack channels
+
+  - #production-emergencies · outages
+  - #cs1-releases
+  ```
+
+`daynote.py channels`, run from the vault root, prints both lists and which projects are
+ongoing. A group DM's id is the `C0...` part of its link in Slack.
 
 **meeting-recap** does the recap part for one meeting, any time: "fetch resume of this
 meet", "get the recap of the sprint review". With no meeting named, it takes the one
@@ -207,6 +244,7 @@ prompt file in `steps/`, readable on its own, and a step can serve more than one
 | `summary` | start | meetings, tasks, Gmail, Jira, `waiting.json`, project `CLAUDE.md` | `summary.md` |
 | `daynote.py prose` | end | the note | `prose.json` |
 | `recap` | end, recap | Gemini notes in Google Drive | `recaps.json` |
+| `decisions` (runs `daynote.py channels`) | end | the tracked channels, your messages and reactions of today, Slack threads | `decisions.json`, `review-decisions.md` |
 | `notes` (runs `daynote.py notes`) | end | `Created` and `Updated` properties, the notes themselves | `notes.json`, `note-recaps.json` |
 | `tags` | end | the note, project folders, vault `CLAUDE.md` | `tags.json`, `review-tags.md` |
 | `review-loose-ends` | end | the note, recaps | `review-loose-ends.md` |
@@ -220,7 +258,7 @@ daily note, and `scripts/tasknote.py` the only code that changes a task line or 
 task note, through the Obsidian CLI. `scripts/tests/test_write.py` covers the morning,
 `scripts/tests/test_close.py` the evening and the recap, `scripts/tests/test_notes.py` the
 notes of the day, `scripts/tests/test_map.py` the Meeting map, `scripts/tests/test_waiting.py`
-Waiting on me, `scripts/tests/test_tasknote.py`
+Waiting on me, `scripts/tests/test_decisions.py` the Slack channels and decisions, `scripts/tests/test_tasknote.py`
 the task notes.
 
 ## Settings

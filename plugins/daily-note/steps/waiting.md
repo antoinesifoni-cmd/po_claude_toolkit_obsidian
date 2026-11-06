@@ -27,7 +27,7 @@ Every call is read-only. Never send, reply, react, comment, label or mark as rea
    - When the mention is not in a thread and has no replies, call `slack_read_channel` with the channel id, `oldest`: the mention's ts and `limit`: `15` instead. A message from `ME` after it means answered.
    - Also answered: other people in the thread already settled what was asked, like a question someone else answered, or a status that needed nothing from him.
    - `oldest` leaves out the mention itself, so "No thread messages" means nobody wrote after it.
-   - A reaction does not count: the tools give reaction counts, not who reacted. Antoine clears those in the Review.
+   - A reaction from Antoine counts as an answer: one `slack_search_public_and_private` call per emoji, `filters`: `hasmy::<emoji>: after:<since>`, `channel_types`: `"public_channel,private_channel,mpim"`, `natural_language_query`: `""`, for each of `+1`, `white_check_mark`, `heavy_check_mark`, `ok_hand`, `100`. Several `hasmy:` filters in one call must all match, so never combine them. A mention found there is answered. Run these 5 searches before the thread reads, and skip the reads for what they settle.
 4. Each one not answered is an item:
    - `source`: `Slack`, or `Slack group` in a group DM
    - `where`: the channel name without `#`, or the group DM's other participants' first names
@@ -59,7 +59,7 @@ Every call is read-only. Never send, reply, react, comment, label or mark as rea
 - Drop a Jira or Confluence mention that asks nothing of him, the same way as on Slack: a cc, "as confirmed with", a ticket closed.
 - `who`: the person's display name.
 - `when`: when it was sent, local time, `YYYY-MM-DDTHH:MM`.
-- `pt`: the project, when one is clear: a project id in the channel name (`pt1760`, `pt-1760`), the page title or the message; or a ticket key that one project's `CLAUDE.md` lists (Grep the key in `Confluence Projects/*/CLAUDE.md` with `output_mode: "files_with_matches"`). Else `null`.
+- `pt`: the project, when one is clear: the project whose `Slack:` line lists the channel or group DM (run the Script with `channels` once, its `projects` list has them), a project id in the channel name (`pt1760`, `pt-1760`), the page title or the message; or a ticket key that one project's `CLAUDE.md` lists (Grep the key in `Confluence Projects/*/CLAUDE.md` with `output_mode: "files_with_matches"`). Else `null`.
 - **Same ask twice:** a Slack message and a Jira mention about the same ticket from the same person are one item: keep the newest, and put both links in `links`.
 - **Cleared:** read `.daily-note/waiting-cleared.json` if it exists, and drop every item whose `id` is in its `cleared` list.
 
