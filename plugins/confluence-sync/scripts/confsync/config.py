@@ -10,7 +10,9 @@ the process.
 
 import json
 import os
+import shutil
 import sys
+from datetime import datetime
 from pathlib import Path
 
 import requests
@@ -90,6 +92,19 @@ def load_json(path: Path, default):
     if path in (MAPPING_FILE, FOLDERS_FILE):
         data = {vault_key(k): v for k, v in data.items()}
     return data
+
+
+def backup_state():
+    """Copy mapping.json and folders.json to .confsync/backups/ before a repair.
+
+    Named by the time, so any relink/unlink can be undone by copying a file back.
+    """
+    folder = STATE_DIR / "backups"
+    folder.mkdir(parents=True, exist_ok=True)
+    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    for src in (MAPPING_FILE, FOLDERS_FILE):
+        if src.exists():
+            shutil.copy2(src, folder / f"{stamp}_{src.name}")
 
 
 def save_json(path: Path, data):

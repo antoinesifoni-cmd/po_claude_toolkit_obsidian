@@ -23,8 +23,9 @@ This list is the only place the order lives. To add, move or remove a step, edit
 2. Read the Settings file. If it is missing or is not valid JSON, say so and stop.
 3. Run these steps in order. Read `<Steps folder>/<step>.md` just before running it.
    1. `meetings`
-   2. `alert-confluence`
-   3. `summary`
+   2. **Meeting map:** run the Script with `map`. It applies the Meeting map in the daily notes folder's `CLAUDE.md` to `meetings.json`. If it fails, remember its message and go on.
+   3. `alert-confluence`
+   4. `summary`
 4. **End:** run the Script with `write`. It writes the note, then opens it in Obsidian.
 
 ## Rules for the whole run
@@ -45,6 +46,7 @@ At most 6 lines, from the step results and the `write` output. Example:
 ```
 Day2Day notes/2026-09-23 updated and opened.
 - meetings: ok, 5 found
+- map: 2 skipped, 1 tagged by the map
 - alert-confluence: ok, 72 checked, 0 moved
 - summary: ok, not checked: none
 - write: block inserted, headings not added (the note already has headings), backup .daily-note/backups/2026-09-23_083012.md

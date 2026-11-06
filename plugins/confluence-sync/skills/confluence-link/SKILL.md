@@ -8,8 +8,10 @@ description: >
   called X", "this note should live at <URL>", "create a Confluence page for this note"
   (created as an unpublished draft by default), or
   reports that a note is "not linked". It also covers looking up a page or folder id by
-  title. For syncing content on already-linked notes, use confluence-pull or confluence-push
-  instead.
+  title, and repairing links after a note or folder was renamed, moved or deleted in the
+  vault: "fix my Confluence links", "I renamed this note", "répare mes liens Confluence",
+  or status lines starting RENAMED?, MISSING, AMBIGUOUS or FOLDER. For syncing content on
+  already-linked notes, use confluence-pull or confluence-push instead.
 ---
 
 # Linking a note to Confluence
@@ -98,6 +100,43 @@ Be concrete before writing anything:
 - Re-linking a path that is already mapped silently replaces the mapping and resets its
   version to 0. If the path is already in `mapping.json`, say so and confirm, rather than
   quietly repointing a note at a different page.
+
+## Fix links after a rename or delete
+
+Links are stored by path, so renaming or moving a linked note or folder in Obsidian, or
+deleting it, leaves a link pointing at nothing. Run status first (from the vault root):
+
+```
+python3 ${CLAUDE_PLUGIN_ROOT}/scripts/conf.py status
+```
+
+Then take its `RENAMED?`, `FOLDER RENAMED?`, `MISSING`, `FOLDER MISSING` and `AMBIGUOUS`
+lines **one at a time**, and ask before each change. Never batch them silently, even when
+the match looks certain: the user wants to confirm every one.
+
+| Line | Ask | On yes |
+|---|---|---|
+| `RENAMED? <old> -> <new>` | "`<old>` was renamed to `<new>`. Move the link?" | `conf.py relink "<old>" "<new>"` |
+| `FOLDER RENAMED? <old> -> <new>` | "Folder `<old>` was renamed to `<new>`. Move its link and the links of the notes inside?" | `conf.py relink "<old>" "<new>"` (one command moves them all) |
+| `MISSING: <old>` | "`<old>` is gone from the vault. Unlink it?" Offer **Unlink** and **Keep for now** | `conf.py unlink "<old>"` |
+| `FOLDER MISSING: <old>` | the same, for a folder | `conf.py unlink "<old>"` |
+| `AMBIGUOUS: ...` | "Page N is in A and B. Which one is the linked note?" Offer each, and **Neither** | `conf.py relink "<old>" "<chosen>"`, nothing for Neither |
+
+Use the exact paths printed, quoted: they contain spaces.
+
+What these commands do, so you can say it plainly:
+
+- They only rewrite `.confsync/mapping.json` / `folders.json`, after copying both to
+  `.confsync/backups/`. Nothing is sent to Confluence.
+- **A local rename never renames the Confluence page.** The page keeps its title. Don't
+  offer to rename it.
+- `relink` keeps the note's version and sync state, so status reads as before the rename.
+  It refuses a note whose properties carry another page id.
+- `unlink` leaves the Confluence page alone and keeps the page's saved copy, so the note
+  can be linked again later.
+
+"Keep for now" changes nothing. The line comes back on the next status, and the morning
+daily note keeps flagging it as **Link lost**.
 
 ## After linking
 

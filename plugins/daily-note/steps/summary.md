@@ -6,7 +6,7 @@
 
 Gather these in order. If one fails, remember it and move on.
 
-1. **Meetings:** `meetings.json` in the Run folder.
+1. **Meetings:** `meetings.json` in the Run folder. Ignore its `skipped` list: those are personal or placeholder events, not part of the day. A meeting with `"kind": "mixed"` is a daily or team meeting across several projects: count it, but give it no project.
 2. **Tasks:** one Grep call from the vault root, with
    - pattern `- \[[ /]\] .*📅\s*\d{4}-\d{2}-\d{2}`
    - glob `!{.*/**,**/Templates/**}`

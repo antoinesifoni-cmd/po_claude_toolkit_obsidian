@@ -36,6 +36,8 @@ Write `meetings.json` in the Run folder, meetings in time order. Made-up example
 
 No meeting today: `{"meetings": []}`.
 
+Do not apply the Meeting map here: the Script's `map` command does it right after, and adds `kind` to the meetings it knows.
+
 ## If it fails
 
 Write `{"error": "<one line reason>"}` to `meetings.json`. No meeting heading or recap is added then, and the Summary or the End of day says the calendar was not checked.

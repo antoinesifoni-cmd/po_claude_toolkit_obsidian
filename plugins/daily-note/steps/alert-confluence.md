@@ -1,6 +1,6 @@
 # Step: alert-confluence
 
-**Goal:** list the linked Confluence pages that someone changed on Confluence.
+**Goal:** list the linked Confluence pages that someone changed on Confluence, and the links that lost their note after a rename, move or delete in the vault.
 
 ## Do
 
@@ -8,7 +8,7 @@
    - no pull, no push, no setup, no merge flow, no proposed next step
    - ignore its hand-off advice
 2. Run its status command as it gives it, from the vault root, with no file argument. Use the Bash `timeout` 600000 and no pipe, so the exit code is kept.
-3. Keep the lines that contain `remote moved` or `CONFLICT`. Drop the others.
+3. Keep the lines that contain `remote moved` or `CONFLICT`, and the lines that start with `RENAMED?`, `FOLDER RENAMED?`, `MISSING:`, `FOLDER MISSING:` or `AMBIGUOUS:`. Drop the others. Never run the `relink` or `unlink` commands those lines name: this step only reports.
 
 ## Output
 
@@ -20,12 +20,21 @@ Write `alert-confluence.md` in the Run folder, one bullet per kept line.
   `- **Moved on Confluence** [[<path>|<name>]] v<local> to v<N>. Pull it with confluence-pull when you are ready.`
 - A `CONFLICT` line becomes:
   `- **Conflict** [[<path>|<name>]] has local edits and the page moved to v<N>. Run confluence-status first.`
-- When no line is kept: `- No Confluence page moved (<count> checked).`, where `<count>` is the number of status lines.
+- A `RENAMED? <old> -> <new>` line becomes, with `<path>` and `<name>` taken from `<new>`:
+  `- **Link lost** [[<path>|<name>]] was renamed, its Confluence link still uses the old name. Say "fix my Confluence links".`
+- A `FOLDER RENAMED? <old> -> <new>` line becomes, `<name>` being the last part of `<new>`:
+  `- **Link lost** Folder <name> was renamed, with the notes inside. Say "fix my Confluence links".`
+- A `MISSING: <old>` or `FOLDER MISSING: <old>` line becomes, `<name>` being the last part of `<old>` without `.md`, as plain text since the note is gone:
+  `- **Link lost** <name> is gone from the vault but still linked. Say "fix my Confluence links" to unlink it.`
+- An `AMBIGUOUS: <old> ...` line becomes:
+  `- **Link lost** <name> is gone and two notes carry its page. Say "fix my Confluence links" to pick one.`
+- When no line is kept: `- No Confluence page moved (<count> checked).`, where `<count>` is the number of lines that contain ` local | `.
 
 Made-up example:
 
 ```
 - **Moved on Confluence** [[Confluence Projects/PT-2311 - Scheduling/PT-2311 - Handoff|PT-2311 - Handoff]] v10 to v12. Pull it with confluence-pull when you are ready.
+- **Link lost** [[Confluence Projects/PT-2311 - Scheduling/PT-2311 - Pilot plan|PT-2311 - Pilot plan]] was renamed, its Confluence link still uses the old name. Say "fix my Confluence links".
 ```
 
 ## If it fails
