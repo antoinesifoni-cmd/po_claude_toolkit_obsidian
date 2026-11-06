@@ -12,6 +12,7 @@
 ## Do
 
 1. Keep the sections that have no project tag at all, in the heading or under it. A section with any tag like `#PT-1234` is done.
+   Leave out the section of a meeting whose entry in `meetings.json` has a `kind`: the script tags a `project` one itself, from the Meeting map, and a `mixed` one mixes several projects, so it gets no tag and no flag. Tagging the lines under a mixed meeting belongs to the Review.
 2. For each one, look for signals in the section itself, its heading, its text and its recap. Nothing else counts, not the project files and not who attends. The signals:
    - the project id, with or without `#` or hyphen (`PT-2311`, `PT2311`)
    - the project's full name, or another name the Project tags section gives it. One common word shared with a project name, like `Mobile` or `AI`, is not a signal.

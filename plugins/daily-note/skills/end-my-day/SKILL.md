@@ -28,13 +28,14 @@ This list is the only place the order lives. To add, move or remove a step, edit
 5. Run these steps in order. Read `<Steps folder>/<step>.md` just before running it.
    1. `meetings`
    2. `unscheduled`
-   3. `recap`, for every meeting in `meetings.json` that has a `doc`
-   4. `notes`
-   5. `tags`
-   6. `review-loose-ends`
-   7. `review-claude-md`
-   8. `correct`
-   9. `wrapup`
+   3. **Meeting map:** run the Script with `map`. It applies the Meeting map in the daily notes folder's `CLAUDE.md` to `meetings.json`, and writes `review-map.md`. If it fails, remember its message and go on.
+   4. `recap`, for every meeting in `meetings.json` that has a `doc`
+   5. `notes`
+   6. `tags`
+   7. `review-loose-ends`
+   8. `review-claude-md`
+   9. `correct`
+   10. `wrapup`
 6. **End:** run the Script with `close`. It writes the note, then opens it in Obsidian.
 
 ## Rules for the whole run
@@ -51,13 +52,14 @@ This list is the only place the order lives. To add, move or remove a step, edit
 
 ## Final report
 
-At most 10 lines, from the step results and the `close` output. Example:
+At most 11 lines, from the step results and the `close` output. Example:
 
 ```
 Day2Day notes/2026-09-23 closed and opened.
 - task-note: 1 created, 1 linked to an existing note
 - meetings: ok, 6 found, 1 added to the note
 - unscheduled: 1 found (12:06)
+- map: 2 skipped, 1 tagged by the map, 1 to map
 - recap: 3 added
 - notes: 2 added, 1 already linked
 - tags: 1 added (Design check-in, PT-2402), 1 unsure

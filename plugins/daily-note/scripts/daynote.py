@@ -19,6 +19,12 @@ Commands (run from the vault root, the folder that holds .obsidian/):
   recap   meeting-recap: add one meeting's recap under its heading, back up, write once
   notes   end-my-day: list the notes created or edited today to notes.json, from the
           Created and Updated properties AutoDater keeps
+  map     both routines, right after the meetings steps: apply the "## Meeting map" table
+          of the daily notes folder's CLAUDE.md to meetings.json (skip meetings leave it,
+          project meetings get their tag, mixed ones are marked), and write review-map.md
+          for the recurring meetings it does not know
+  seen    print the meeting headings of the last 3 weeks of daily notes, with how often
+          each was tagged, to propose a first Meeting map. Writes nothing
 
 Why a script does every write: the vault has no git and no undo. Keeping the one piece of
 code that can damage a note small, in one place, and covered by tests is the safety net.
@@ -790,6 +796,17 @@ def add_tags(lines: list, tags, reserved: set, note_name: str, tail_titles: set)
     return lines, f"added {added}"
 
 
+def map_tags(tags, meetings):
+    """The tags step's tags, plus the tag of each meeting the meeting map names a project,
+    for a section that has none yet. None when neither has anything to say."""
+    extra = [{"heading": m.get("heading") or m.get("title"), "start": m.get("start"),
+              "end": m.get("end"), "tag": m.get("pt")}
+             for m in meetings or [] if m.get("kind") == "project"]
+    if tags is None and not extra:
+        return None
+    return (tags or []) + extra
+
+
 def doc_url(doc: str, tab) -> str:
     url = f"https://docs.google.com/document/d/{doc}/edit"
     return url + f"?tab={tab}" if TAB_ID.match(str(tab or "")) else url
@@ -897,7 +914,8 @@ def close(root: Path, now: datetime = None) -> dict:
 
     lines, fixes = apply_corrections(d["lines"], read_list(run / "corrections.json", "corrections"), rel)
     lines, added = add_meetings(lines, meetings, rel, tail_titles)
-    lines, tags = add_tags(lines, read_list(run / "tags.json", "tags"), reserved, rel, tail_titles)
+    lines, tags = add_tags(lines, map_tags(read_list(run / "tags.json", "tags"), meetings),
+                           reserved, rel, tail_titles)
     lines, recaps = add_recaps(lines, read_list(run / "recaps.json", "recaps"), reserved, rel, tail_titles)
     lines, notes = add_notes(root, lines, read_list(run / "notes.json", "notes"),
                              read_list(run / "note-recaps.json", "notes"), rel, tail_titles)
@@ -984,7 +1002,7 @@ def notes_cmd(root: Path, now: datetime = None) -> dict:
     """List the notes created or edited today in notes.json. Created wins over edited, so
     a note made and changed today shows once, at its creation time."""
     now = now or datetime.now().astimezone()
-    vault_config(root)
+    cfg = vault_config(root)
     day = now.date()
     created_key, updated_key, excluded = autodater(root)
     found = []
@@ -994,8 +1012,8 @@ def notes_cmd(root: Path, now: datetime = None) -> dict:
             continue   # .daily-note, .trash, .obsidian
         if any(rel.startswith(x + "/") for x in excluded) or DATE_NAME.match(p.stem):
             continue   # templates, and the daily notes themselves
-        if NOT_IN_LINK.search(rel):
-            continue
+        if NOT_IN_LINK.search(rel) or rel == map_rel(cfg):
+            continue   # the daily notes' own CLAUDE.md is context, not a note of the day
         try:
             props = properties(split_eol(read_text(p))[0])
             st = p.stat()
@@ -1098,8 +1116,192 @@ def open_note(vault_name: str, rel: str):
         return False, uri
 
 
+# ---------------------------------------------------------------- meeting map
+
+MAP_FILE = "CLAUDE.md"                         # in the daily notes folder
+MAP_HEADING = re.compile(r"^##\s+meeting map\s*$", re.I)
+MAP_KINDS = ("project", "mixed", "skip")
+LOOSE_ID = re.compile(r"^#?([A-Z]{2,})-?(\d+)$")
+HISTORY_DAYS = 21                              # how far back a meeting counts as recurring
+MAP_ASK_AFTER = 3                              # untagged this many days: ask to map it
+
+
+def map_rel(cfg: dict) -> str:
+    return f"{cfg['folder']}/{MAP_FILE}" if cfg["folder"] else MAP_FILE
+
+
+def plain(text) -> str:
+    """How map titles compare: no case, no accents, no emoji, single spaces."""
+    text = unicodedata.normalize("NFKD", str(text or ""))
+    text = "".join(c for c in text if unicodedata.category(c) not in ("Mn", "So", "Sk", "Cf", "Cs", "Co"))
+    return " ".join(text.casefold().split())
+
+
+def starts_with(title, prefix) -> bool:
+    """"PCA Touch point" starts "PCA Touch point U&PM", but "PO" does not start "POC demo"."""
+    t, p = plain(title), plain(prefix)
+    if not p or not t.startswith(p):
+        return False
+    return len(t) == len(p) or not t[len(p)].isalnum() or not p[-1].isalnum()
+
+
+def read_map(root: Path, cfg: dict):
+    """The rows of the "## Meeting map" table in the daily notes folder's CLAUDE.md, and
+    the rows it could not read. ([], []) when there is no such file or section."""
+    path = root / map_rel(cfg)
+    if not path.exists():
+        return [], []
+    rows, bad, inside, in_code = [], [], False, False
+    for line in split_eol(read_text(path))[0].split("\n"):
+        s = line.strip()
+        if FENCE.match(line):
+            in_code = not in_code
+            continue
+        if in_code:
+            continue
+        if MAP_HEADING.match(s):
+            inside = True
+            continue
+        if inside and HEADING.match(line):
+            break
+        if not inside or not s.startswith("|"):
+            continue
+        cells = [c.strip().strip("`").strip() for c in s.strip("|").split("|")]
+        if len(cells) < 2 or not "".join(cells).strip("-: ") or cells[1].casefold() == "kind":
+            continue   # the separator line, or the header
+        title, kind = cells[0], cells[1].casefold()
+        pt = LOOSE_ID.match((cells[2] if len(cells) > 2 else "").upper().replace(" ", ""))
+        if not plain(title) or kind not in MAP_KINDS or (kind == "project" and not pt):
+            bad.append(s)
+            continue
+        rows.append({"title": title, "kind": kind,
+                     "pt": f"{pt.group(1)}-{pt.group(2)}" if kind == "project" else None})
+    return rows, bad
+
+
+def map_row(rows: list, m: dict):
+    """The row for a meeting: its title or heading starts with the row's title. The longest
+    row wins, so a specific line beats a general one."""
+    texts = [t for t in (m.get("title"), m.get("heading")) if t]
+    hits = [r for r in rows if any(starts_with(t, r["title"]) for t in texts)]
+    return max(hits, key=lambda r: len(plain(r["title"])), default=None)
+
+
+def note_days(root: Path, folder: str, first: date, last: date) -> list:
+    """(day, path) of the daily notes from first to last, month subfolders included."""
+    base = root / folder if folder else root
+    out = []
+    for p in base.rglob("*.md"):
+        if any(part.startswith(".") for part in p.relative_to(root).parts):
+            continue
+        if DATE_NAME.match(p.stem):
+            try:
+                d = date.fromisoformat(p.stem)
+            except ValueError:
+                continue
+            if first <= d <= last:
+                out.append((d, p))
+    return sorted(out)
+
+
+def meetings_seen(root: Path, cfg: dict, today: date, tail_titles: set) -> dict:
+    """The meeting headings of the daily notes in the last HISTORY_DAYS days before today:
+    {title key: {"heading", "days", "untagged", "tags": {tag: days}}}. A meeting is a
+    section with a time range under its heading."""
+    seen = {}
+    for d, p in note_days(root, cfg["folder"], today - timedelta(days=HISTORY_DAYS),
+                          today - timedelta(days=1)):
+        try:
+            lines = split_eol(read_text(p))[0].split("\n")
+            secs = layout(lines, p.name, tail_titles)[2]
+        except (OSError, UnicodeDecodeError, Stop):
+            continue
+        done = set()
+        for s in secs:
+            key = title_key(s["title"])
+            if not s["time"] or not key or key in done:
+                continue
+            done.add(key)
+            tags = sorted(set(t.lstrip("#") for t in
+                              PROJECT_TAG.findall("\n".join(lines[s["at"]:s["stop"]]))))
+            e = seen.setdefault(key, {"heading": heading_text(TAG.sub(" ", s["title"])),
+                                      "days": 0, "untagged": 0, "tags": {}})
+            e["days"] += 1
+            e["untagged"] += not tags
+            for t in tags:
+                e["tags"][t] = e["tags"].get(t, 0) + 1
+    return seen
+
+
+def map_cmd(root: Path, now: datetime = None) -> dict:
+    """Apply the meeting map to meetings.json, right after the meetings steps: a skip
+    meeting leaves the list, a project one gets its tag and "kind": "project", a mixed one
+    gets "kind": "mixed". Writes review-map.md with the recurring meetings of today that
+    the map does not know and that are never tagged."""
+    now = now or datetime.now().astimezone()
+    cfg = vault_config(root)
+    run = root / STATE_DIR / "run"
+    rel = map_rel(cfg)
+    rows, bad = read_map(root, cfg)
+    out = {"map": rel if (root / rel).exists() else None, "rows": len(rows), "bad_rows": bad}
+
+    path = run / "meetings.json"
+    meetings = read_list(path, "meetings")
+    if meetings is None:
+        out["meetings"] = "not checked"
+        return out
+    data = json.loads(read_text(path))
+    kept, skipped = [], []
+    for m in meetings:
+        row = map_row(rows, m)
+        if row and row["kind"] == "skip":
+            skipped.append({"start": m.get("start"), "heading": m.get("heading") or m.get("title")})
+            continue
+        if row:
+            m["kind"] = row["kind"]
+            if row["kind"] == "project" and not PROJECT_ID.match(str(m.get("pt") or "")):
+                m["pt"] = row["pt"]
+        kept.append(m)
+    data["meetings"], data["skipped"] = kept, skipped
+    with open(path, "w", encoding="utf-8", newline="") as f:
+        json.dump(data, f, ensure_ascii=False, indent=1)
+
+    seen = meetings_seen(root, cfg, now.date(), open_day(root, now)["tail_titles"])
+    ask, asked = [], set()
+    for m in kept:
+        key = title_key(m.get("heading") or m.get("title"))
+        e = seen.get(key)
+        if m.get("kind") or m.get("pt") or not e or key in asked or e["untagged"] < MAP_ASK_AFTER:
+            continue
+        asked.add(key)
+        how = ("never tagged" if e["untagged"] == e["days"]
+               else f"untagged {e['untagged']} times")
+        ask.append(f'- **Map?** "{heading_text(m.get("heading") or m.get("title") or "")}" came '
+                   f"{e['days']} times in {HISTORY_DAYS // 7} weeks, {how}. Add it to the Meeting "
+                   f"map in {rel}: a project id, mixed or skip.")
+    with open(run / "review-map.md", "w", encoding="utf-8", newline="") as f:
+        f.write("".join(line + "\n" for line in ask))
+    out.update({"skipped": len(skipped), "project": sum(m.get("kind") == "project" for m in kept),
+                "mixed": sum(m.get("kind") == "mixed" for m in kept), "ask": len(ask)})
+    return out
+
+
+def seen_cmd(root: Path, now: datetime = None) -> dict:
+    """For a first Meeting map: every meeting heading of the last HISTORY_DAYS days, most
+    frequent first, with how often it was tagged and with what. Writes nothing."""
+    now = now or datetime.now().astimezone()
+    cfg = vault_config(root)
+    seen = meetings_seen(root, cfg, now.date(), open_day(root, now)["tail_titles"])
+    rows, _ = read_map(root, cfg)
+    meetings = sorted(seen.values(), key=lambda e: (-e["days"], e["heading"].casefold()))
+    for e in meetings:
+        row = map_row(rows, {"heading": e["heading"]})
+        e["mapped"] = row["kind"] if row else None
+    return {"map": map_rel(cfg), "days": HISTORY_DAYS, "meetings": meetings}
+
+
 COMMANDS = {"today": today_cmd, "write": write, "prose": prose, "close": close, "recap": recap,
-            "notes": notes_cmd}
+            "notes": notes_cmd, "map": map_cmd, "seen": seen_cmd}
 
 
 def main():
