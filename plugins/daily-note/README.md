@@ -42,8 +42,8 @@ once before it creates its note.
     the day they come and the next.
   - The same ask on Slack and on Jira shows once, with both links. Links are only Slack,
     Jira, Confluence, Google Docs and Gmail addresses, checked by the script.
-  - An id in `.daily-note/waiting-cleared.json` never shows again. The Review will write
-    it, once it asks about each item.
+  - An item you answer Done or Not for me in the Review never shows again. It is kept in
+    `.daily-note/waiting-cleared.json`.
 - **Meetings:** one H1 per meeting from Google Calendar, with its time and `#PT-xxxx` tag.
   Added only while the note has no heading of your own yet, so a re-run never duplicates
   them and never touches what you wrote. The Meeting map decides the tag of a recurring
@@ -93,8 +93,35 @@ once before it creates its note.
   during the day is gone and what came in is added. The Review gets one line with the count.
 - **Review:** loose ends (open tasks with no due date, your Gemini action items that are
   not tasks yet, meetings with nothing written, a mixed meeting with notes and no tag),
-  the recurring meetings the Meeting map does not know yet (**Map?**), and the
-  `CLAUDE.md` files today made out of date. It flags them, it never edits them.
+  the recurring meetings the Meeting map does not know yet (**Map?**), the `CLAUDE.md`
+  files today made out of date, each Slack decision, and what still waits on you.
+
+### The interactive Review
+
+When the Review has something, end-my-day asks once: "Review: N items. Do you have time
+for the review now?" **Later** leaves the list in the note, and "do the review" picks it
+up the same day. **Yes** goes through it with the `review` skill, one question per item:
+
+| Item | Choices |
+|---|---|
+| Action item | Create task (the meeting's date, else tomorrow) · Task + task note · Ignore and erase · Keep |
+| No due date | Due tomorrow · Mark done · Ignore and erase · Keep |
+| Tag? | One of the projects it points to · No tag · Keep |
+| No notes | Fetch the recap · Ignore and erase · Never flag this meeting (mixed in the map) |
+| Map? | A project id · mixed · skip · Ask later |
+| Update CLAUDE.md | Show me the change, then apply · Ignore and erase · Keep |
+| Decision | Add to the project CLAUDE.md · Comment on its Jira issue · Both · Nothing |
+| Decision? | It is a decision · Not one · Keep |
+| Waiting on me | For each ask: Done · Not for me · Keep |
+
+- Say "Friday" or "PT-1760" instead of a choice, or "stop" at any time.
+- A new task goes under its meeting, else under `# Task`: `- [ ] text #PT-2311 📅 2026-09-25 ➕ 2026-09-23`.
+- A `CLAUDE.md` edit and a Jira comment show their exact text in the question first. Your
+  answer is the yes.
+- At the end the Review keeps only what is left, under a trace: `- Review done 17:42: 3
+  tasks, 1 tag, 4 erased, 1 kept.` What is done or erased is remembered in
+  `.daily-note/review-done.json`, so running end-my-day again that day does not bring it
+  back. The day's items are kept in `.daily-note/review/<date>.json`.
 
 ### The Meeting map
 
@@ -266,18 +293,19 @@ prompt file in `steps/`, readable on its own, and a step can serve more than one
 | `task-note` | end, task-note | the tasks marked `#note`, or the selected ones | `task-note.json`, `task-titles.json` |
 | `meetings` | all | Google Calendar | `meetings.json` |
 | `unscheduled` | end, recap | Gemini "Notes:" emails in Gmail | adds to `meetings.json` |
-| map (`daynote.py map`) | start, end | the Meeting map, the last 3 weeks of daily notes | `meetings.json`, `review-map.md` |
+| map (`daynote.py map`) | start, end | the Meeting map, the last 3 weeks of daily notes | `meetings.json`, `review-map.json` |
 | `alert-confluence` | start, back | `confluence-sync:confluence-status` | `alert-confluence.md` |
 | `back` | im-back | the calendar over the range, Gemini notes, project Slack channels, Jira, `alert-confluence` | `back.json`, `back-summary.md` |
 | `waiting` | start, end | Slack mentions, Gmail mention and share emails, your Confluence comments, Jira comments | `waiting.json` |
 | `summary` | start | meetings, tasks, Gmail, Jira, `waiting.json`, project `CLAUDE.md` | `summary.md` |
 | `daynote.py prose` | end | the note | `prose.json` |
 | `recap` | end, recap | Gemini notes in Google Drive | `recaps.json` |
-| `decisions` (runs `daynote.py channels`) | end | the tracked channels, your messages and reactions of today, Slack threads | `decisions.json`, `review-decisions.md` |
+| `decisions` (runs `daynote.py channels`) | end | the tracked channels, your messages and reactions of today, Slack threads | `decisions.json`, `review-decisions.json` |
 | `notes` (runs `daynote.py notes`) | end | `Created` and `Updated` properties, the notes themselves | `notes.json`, `note-recaps.json` |
-| `tags` | end | the note, project folders, vault `CLAUDE.md` | `tags.json`, `review-tags.md` |
-| `review-loose-ends` | end | the note, recaps | `review-loose-ends.md` |
-| `review-claude-md` | end | the note, recaps, `CLAUDE.md` files | `review-claude-md.md` |
+| `tags` | end | the note, project folders, vault `CLAUDE.md` | `tags.json`, `review-tags.json` |
+| `review-loose-ends` | end | the note, recaps | `review-loose-ends.json` |
+| `review-claude-md` | end | the note, recaps, decisions, `CLAUDE.md` files | `review-claude-md.json` |
+| review (`daynote.py review-list`, `review-apply`) | end, review | the day's Review items, your answers | `review-answers.json`, the note |
 | `correct` | end | `prose.json`, `text-corrector` | `corrections.json` |
 | `wrapup` | end | the note, tasks closed today, recaps | `wrapup.md` |
 | end (`daynote.py write`, `close`, `recap`) | start, end, recap | the run folder | the note |
@@ -288,7 +316,8 @@ task note, through the Obsidian CLI. `scripts/tests/test_write.py` covers the mo
 `scripts/tests/test_close.py` the evening and the recap, `scripts/tests/test_notes.py` the
 notes of the day, `scripts/tests/test_map.py` the Meeting map, `scripts/tests/test_waiting.py`
 Waiting on me, `scripts/tests/test_decisions.py` the Slack channels and decisions, `scripts/tests/test_catchup.py`
-past days, the morning reminders and the I'm back note, `scripts/tests/test_tasknote.py`
+past days, the morning reminders and the I'm back note, `scripts/tests/test_review.py` the
+interactive Review, `scripts/tests/test_tasknote.py`
 the task notes.
 
 ## Settings

@@ -33,10 +33,13 @@ Write `tags.json` in the Run folder. `start` and `end` come from the section's t
 
 Nothing to tag: `{"tags": []}`.
 
-Only when a case was unsure, also write `review-tags.md`, one bullet each, naming the signal you saw. Made-up example:
+Only when a case was unsure, also write `review-tags.json`, one item each: `kind` `tag`, `key` and `heading` the section's heading, `options` the project ids the signals point to, most likely first, and `text` the bullet naming the signal you saw. Made-up example:
 
-```
-- **Tag?** Design check-in mentions CLN-482, a PT-2311 ticket, and the PT-2402 consent form. Add the tag yourself.
+```json
+{"items": [
+  {"kind": "tag", "key": "Design check-in", "heading": "Design check-in", "options": ["PT-2311", "PT-2402"],
+   "text": "- **Tag?** Design check-in mentions CLN-482, a PT-2311 ticket, and the PT-2402 consent form."}
+]}
 ```
 
 ## If it fails

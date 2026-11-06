@@ -25,15 +25,19 @@ Flag the vault file when:
 
 ## Output
 
-Write `review-claude-md.md` in the Run folder. Link a project file by its full path, so the link opens that file. Made-up example:
+Write `review-claude-md.json` in the Run folder, one item per file: `kind` `update`, `key` and `path` the file's path, `section` the heading to change, `fact` today's fact in one sentence, and `text` the bullet. In `text`, link a project file by its full path, so the link opens that file. Made-up example:
 
-```
-- **Update** [[Confluence Projects/PT-2311 - Scheduling/CLAUDE|PT-2311 CLAUDE.md]] State is from 2026-08-28 and says the pilot starts in November. Today it moved to the week of October 5.
-- **Update** vault CLAUDE.md: PT-2402 has a project folder but is not in Project tags.
+```json
+{"items": [
+  {"kind": "update", "key": "Confluence Projects/PT-2311 - Scheduling/CLAUDE.md",
+   "path": "Confluence Projects/PT-2311 - Scheduling/CLAUDE.md", "section": "## State",
+   "fact": "The pilot moved from November to the week of October 5.",
+   "text": "- **Update** [[Confluence Projects/PT-2311 - Scheduling/CLAUDE|PT-2311 CLAUDE.md]] State is from 2026-08-28 and says the pilot starts in November. Today it moved to the week of October 5."}
+]}
 ```
 
-Nothing to update: write the file empty. When no Review step finds anything, the note says `- Nothing to flag.` once.
+Nothing to update: `{"items": []}`. When no Review step finds anything, the note says `- Nothing to flag.` once.
 
 ## If it fails
 
-Write `- **CLAUDE.md check incomplete**: <one line reason>.`
+Write `{"items": [{"kind": "note", "key": "claude-md-failed", "text": "- **CLAUDE.md check incomplete**: <one line reason>."}]}`.
