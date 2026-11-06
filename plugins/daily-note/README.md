@@ -18,10 +18,25 @@ since asking is the whole point.
 **start-my-day**, in the morning, builds or updates today's note, then opens it in a pinned tab:
 
 - **Summary:** 3 to 5 short bullets on how the day looks, built from your meetings, tasks due or
-  overdue, the Gmail Jira labels, your open Jira issues and each project's `CLAUDE.md`.
+  overdue, the Gmail Jira labels, your open Jira issues, what waits on you and each
+  project's `CLAUDE.md`.
 - **Alert:** the linked Confluence pages that someone changed on Confluence, and the
   links that lost their note after a rename, move or delete in the vault (**Link lost**),
   from `confluence-sync`.
+- **Waiting on me:** what people asked you in the last 5 days and you have not answered,
+  oldest first, 10 lines at most. Each line has the source, where, who, what they need in a
+  few words, the project tag when clear, its age and its links:
+  - **Slack:** mentions in channels and group DMs. 1:1 DMs are left out. A mention you
+    replied to after it, or that the thread already settled, is not listed. Thanks, kudos,
+    FYI and cc are skipped.
+  - **Confluence and Jira:** the "mentioned you" emails, in all mail. Gone once you
+    commented on the page or the ticket after it.
+  - **Google Docs:** comment emails, until they age out, and "shared with you" emails, on
+    the day they come and the next.
+  - The same ask on Slack and on Jira shows once, with both links. Links are only Slack,
+    Jira, Confluence, Google Docs and Gmail addresses, checked by the script.
+  - An id in `.daily-note/waiting-cleared.json` never shows again. The Review will write
+    it, once it asks about each item.
 - **Meetings:** one H1 per meeting from Google Calendar, with its time and `#PT-xxxx` tag.
   Added only while the note has no heading of your own yet, so a re-run never duplicates
   them and never touches what you wrote. The Meeting map decides the tag of a recurring
@@ -54,6 +69,8 @@ since asking is the whole point.
   Headings are never changed.
 - **End of day:** 3 to 5 short bullets on what the day achieved, from the note and the tasks
   you closed today, above the Task section.
+- **Waiting on me, refreshed:** the morning list is rebuilt in place, so what you answered
+  during the day is gone and what came in is added. The Review gets one line with the count.
 - **Review:** loose ends (open tasks with no due date, your Gemini action items that are
   not tasks yet, meetings with nothing written, a mixed meeting with notes and no tag),
   the recurring meetings the Meeting map does not know yet (**Map?**), and the
@@ -137,7 +154,8 @@ it is. Before every write, the note is copied to `.daily-note/backups/`.
    `---` and `# Task`.
 2. Install `confluence-sync` too, for the Alert section. Without it, the Alert says the
    check did not run.
-3. Connect the Google Calendar, Gmail, Google Drive and Atlassian connectors in Claude.
+3. Connect the Google Calendar, Gmail, Google Drive, Atlassian and Slack connectors in
+   Claude. Without Slack, Waiting on me lists the emails only.
 4. Have a `text-corrector` skill, for the corrections. Without it, that step is skipped.
 5. Install the Advanced URI community plugin in Obsidian.
 6. Start Claude Code in the vault root, the folder that holds `.obsidian/`.
@@ -185,7 +203,8 @@ prompt file in `steps/`, readable on its own, and a step can serve more than one
 | `unscheduled` | end, recap | Gemini "Notes:" emails in Gmail | adds to `meetings.json` |
 | map (`daynote.py map`) | start, end | the Meeting map, the last 3 weeks of daily notes | `meetings.json`, `review-map.md` |
 | `alert-confluence` | start | `confluence-sync:confluence-status` | `alert-confluence.md` |
-| `summary` | start | meetings, tasks, Gmail, Jira, project `CLAUDE.md` | `summary.md` |
+| `waiting` | start, end | Slack mentions, Gmail mention and share emails, your Confluence comments, Jira comments | `waiting.json` |
+| `summary` | start | meetings, tasks, Gmail, Jira, `waiting.json`, project `CLAUDE.md` | `summary.md` |
 | `daynote.py prose` | end | the note | `prose.json` |
 | `recap` | end, recap | Gemini notes in Google Drive | `recaps.json` |
 | `notes` (runs `daynote.py notes`) | end | `Created` and `Updated` properties, the notes themselves | `notes.json`, `note-recaps.json` |
@@ -200,7 +219,8 @@ Claude gathers, the script writes. `scripts/daynote.py` is the only code that ch
 daily note, and `scripts/tasknote.py` the only code that changes a task line or creates a
 task note, through the Obsidian CLI. `scripts/tests/test_write.py` covers the morning,
 `scripts/tests/test_close.py` the evening and the recap, `scripts/tests/test_notes.py` the
-notes of the day, `scripts/tests/test_map.py` the Meeting map, `scripts/tests/test_tasknote.py`
+notes of the day, `scripts/tests/test_map.py` the Meeting map, `scripts/tests/test_waiting.py`
+Waiting on me, `scripts/tests/test_tasknote.py`
 the task notes.
 
 ## Settings

@@ -19,7 +19,8 @@ Gather these in order. If one fails, remember it and move on.
 
    Use only the subject and snippet of messages dated `mail_since` or later, since a thread can also carry older messages. Do not open threads.
 4. **Jira:** the `searchJiraIssuesUsingJql` tool, with `cloudId`: `jira.site`, `jql`: `jira.jql`, `maxResults: 50` and `fields: ["summary", "status", "priority", "duedate"]`.
-5. **Projects:** take the PT ids from today's meetings first, then from the due and overdue tasks, at most 4. For each one:
+5. **Waiting on me:** `waiting.json` in the Run folder, when it has `items`. One bullet: how many things wait on Antoine and how many are 2 days old or more, like `5 things wait on you, 2 older than 2 days`. Name the oldest ask in a few words.
+6. **Projects:** take the PT ids from today's meetings first, then from the due and overdue tasks, at most 4. For each one:
    - Glob `Confluence Projects/<PT-id> - */CLAUDE.md`. If there is no file, skip it.
    - Grep `^## ` in it, with line numbers, to find its sections.
    - Read only the section whose heading starts with `## State`, and the one that starts with `## Open` if there is one. Use Read with offset and limit.
