@@ -24,7 +24,8 @@ since asking is the whole point.
   from `confluence-sync`.
 - **Meetings:** one H1 per meeting from Google Calendar, with its time and `#PT-xxxx` tag.
   Added only while the note has no heading of your own yet, so a re-run never duplicates
-  them and never touches what you wrote.
+  them and never touches what you wrote. The Meeting map decides the tag of a recurring
+  meeting and leaves out personal events, see below.
 
 **end-my-day**, in the evening, completes the note, then opens it and unpins its tab:
 
@@ -46,15 +47,46 @@ since asking is the whole point.
   `Updated` properties AutoDater keeps. Daily notes, AutoDater's excluded folders and notes
   already linked in today's note are left out.
 - **Project tags:** a `#PT-xxxx` tag on each section clearly about one project that has
-  none. An unsure case is flagged instead.
+  none, and on each meeting the Meeting map names a project. An unsure case is flagged
+  instead. A mixed meeting is never tagged.
 - **Corrections:** your `text-corrector` skill fixes the lines you wrote. The script
   refuses any fix that would touch a link, tag, date, time, emoji or list marker.
   Headings are never changed.
 - **End of day:** 3 to 5 short bullets on what the day achieved, from the note and the tasks
   you closed today, above the Task section.
 - **Review:** loose ends (open tasks with no due date, your Gemini action items that are
-  not tasks yet, meetings with nothing written) and the `CLAUDE.md` files today made out
-  of date. It flags them, it never edits them.
+  not tasks yet, meetings with nothing written, a mixed meeting with notes and no tag),
+  the recurring meetings the Meeting map does not know yet (**Map?**), and the
+  `CLAUDE.md` files today made out of date. It flags them, it never edits them.
+
+### The Meeting map
+
+A table in the daily notes folder's own `CLAUDE.md` (`Day2Day notes/CLAUDE.md`) says what
+each recurring meeting is. A title matches a row when it starts with the row's text, with
+case, accents and emojis ignored. The longest match wins, so a specific row beats a
+general one.
+
+```markdown
+## Meeting map
+
+| Title starts with | Kind    | Project |
+|-------------------|---------|---------|
+| PCA Touch point   | project | PT-1760 |
+| Mobile daily      | mixed   |         |
+| Monthly 5@7       | skip    |         |
+```
+
+- **project:** the meeting always gets this tag, in the morning and at end of day. A
+  title that starts with a project id keeps that id.
+- **mixed:** a daily or team meeting across several projects. A heading, no tag, never
+  flagged as "No notes". Notes written under it with no tag get a **Tag?** in the Review.
+- **skip:** a personal event or a calendar placeholder. No heading, no recap, and the
+  Summary ignores it.
+
+A meeting seen 3 times or more in the last 3 weeks, mostly untagged and not in the table,
+comes up as **Map?** in the Review. `daynote.py seen`, run from the vault root, lists the
+meetings of the last 3 weeks with how often each was tagged, to start or grow the table.
+The file is context, so it never shows as a note of the day.
 
 **meeting-recap** does the recap part for one meeting, any time: "fetch resume of this
 meet", "get the recap of the sprint review". With no meeting named, it takes the one
@@ -151,6 +183,7 @@ prompt file in `steps/`, readable on its own, and a step can serve more than one
 | `task-note` | end, task-note | the tasks marked `#note`, or the selected ones | `task-note.json`, `task-titles.json` |
 | `meetings` | all | Google Calendar | `meetings.json` |
 | `unscheduled` | end, recap | Gemini "Notes:" emails in Gmail | adds to `meetings.json` |
+| map (`daynote.py map`) | start, end | the Meeting map, the last 3 weeks of daily notes | `meetings.json`, `review-map.md` |
 | `alert-confluence` | start | `confluence-sync:confluence-status` | `alert-confluence.md` |
 | `summary` | start | meetings, tasks, Gmail, Jira, project `CLAUDE.md` | `summary.md` |
 | `daynote.py prose` | end | the note | `prose.json` |
@@ -167,7 +200,7 @@ Claude gathers, the script writes. `scripts/daynote.py` is the only code that ch
 daily note, and `scripts/tasknote.py` the only code that changes a task line or creates a
 task note, through the Obsidian CLI. `scripts/tests/test_write.py` covers the morning,
 `scripts/tests/test_close.py` the evening and the recap, `scripts/tests/test_notes.py` the
-notes of the day, `scripts/tests/test_tasknote.py`
+notes of the day, `scripts/tests/test_map.py` the Meeting map, `scripts/tests/test_tasknote.py`
 the task notes.
 
 ## Settings
