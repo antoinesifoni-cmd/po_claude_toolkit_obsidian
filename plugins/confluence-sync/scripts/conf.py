@@ -11,6 +11,8 @@ Commands:
   find         <title>             Search Confluence by title (to get an id to link)
   link         <path> <url|id>     Map a note/folder to an existing page/folder
   link-folder  <path> <url|id>     Alias for `link`, forced to folder
+  relink       <old> <new>         A linked note/folder was renamed in the vault: move its link
+  unlink       <path>              Forget a note's/folder's link (Confluence untouched)
   create-page   <file>   --parent <id>  Create a NEW Confluence page from a local note
   create-page   <file>   --draft        ... as an unpublished draft, published from Confluence
   create-folder <folder> --parent <id>  Create a NEW Confluence folder + local directory
@@ -93,7 +95,9 @@ Code layout - this file is only the argparse wiring; everything else is in confs
   drafts.py       push --draft: the page's editor draft, and when it counts as published
 
   commands/sync.py      pull, push, resolve         (the two directions content moves)
-  commands/link.py      link, link-folder, find     (attach to pages that exist)
+  commands/link.py      link, link-folder, find,    (attach to pages that exist)
+                        relink, unlink              (repair links after a vault rename)
+  reconcile.py    finds linked notes/folders renamed, moved or deleted in the vault
   commands/create.py    create-page, create-folder  (make new ones)
   commands/scaffold.py  scaffold                    (whole trees from a YAML spec)
   commands/users.py     users
@@ -121,7 +125,7 @@ except ImportError as e:
     sys.exit(f"Missing dependency: {e.name}. Run: pip install requests markdown markdownify pyyaml")
 
 from confsync.commands.create import cmd_create_folder, cmd_create_page
-from confsync.commands.link import cmd_find, cmd_link
+from confsync.commands.link import cmd_find, cmd_link, cmd_relink, cmd_unlink
 from confsync.commands.scaffold import cmd_scaffold
 from confsync.commands.status import cmd_rebaseline, cmd_status
 from confsync.commands.sync import cmd_pull, cmd_push, cmd_resolve
@@ -150,6 +154,12 @@ def main():
     sp.add_argument("query"); sp.add_argument("--space", default=None)
     sp.add_argument("--limit", type=int, default=10)
     sp.set_defaults(fn=cmd_find)
+
+    sp = sub.add_parser("relink", help="move a link after a rename in the vault")
+    sp.add_argument("old"); sp.add_argument("new"); sp.set_defaults(fn=cmd_relink)
+
+    sp = sub.add_parser("unlink", help="forget a note's or folder's link")
+    sp.add_argument("path"); sp.set_defaults(fn=cmd_unlink)
 
     sp = sub.add_parser("pull"); sp.add_argument("file", nargs="?")
     sp.add_argument("--all", action="store_true"); sp.add_argument("--force", action="store_true")

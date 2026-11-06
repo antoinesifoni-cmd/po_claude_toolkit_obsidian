@@ -122,6 +122,12 @@ def pull_one(cfg, s, mapping, f, force=False, decisions=None, create_dirs=False)
         print(f"{f}: its folder no longer exists locally - skipped. If the folder was "
               f"moved or renamed, re-link the note at its new path.")
         return False
+    if not local.exists() and entry.get("version") and not (force or create_dirs):
+        # It was synced, so it existed: renamed or deleted in the vault. Writing it would
+        # put a second copy of the page beside the renamed note.
+        print(f"{f}: gone from the vault - skipped. Run status: it says whether the note "
+              f"was renamed (relink) or deleted (unlink).")
+        return False
 
     page = get_page_body(cfg, s, entry["page_id"])
     if page.get("status") == "draft":
