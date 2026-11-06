@@ -68,7 +68,9 @@ once before it creates its note.
   `*edited 14:05*`, a one sentence recap and the link to the note. A note made and changed
   the same day shows once, at its creation time. The times come from the `Created` and
   `Updated` properties AutoDater keeps. Daily notes, AutoDater's excluded folders and notes
-  already linked in today's note are left out.
+  already linked in today's note are left out. A `CLAUDE.md` you edited gets no section:
+  End of day gets one bullet for all of them, `- Project context updated #PT-1760 #PT-1778,
+  vault`, with the project tag, `vault` for the root one, or the folder name otherwise.
 - **Slack decisions:** each product decision made on Slack today, as one line:
   `- ⚖️ **Decided (Slack):** load test dropped, the 2 min check is enough #PT-1760 MYLE-30537 [thread](...)`.
   What was decided in 20 words at most, in English whatever the language of the thread,

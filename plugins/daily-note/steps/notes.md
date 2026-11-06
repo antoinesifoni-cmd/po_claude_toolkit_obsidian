@@ -5,8 +5,8 @@
 ## Do
 
 1. Run the Script with `notes`. It finds the notes from their `Created` and `Updated` properties and writes `notes.json` in the Run folder. It skips the daily notes and the AutoDater excluded folders. If it fails, remember its message and stop this step.
-2. Read `notes.json`. Each entry has `path`, `name`, `kind` (`created` or `edited`), `time` and `pt`. Never write or change this file: `close` trusts only what the Script wrote.
-3. For each note, Read `path` from the vault root, at most its first 200 lines.
+2. Read `notes.json`. Each entry has `path`, `name`, `kind` (`created`, `edited` or `context`), `time` and `pt`. Never write or change this file: `close` trusts only what the Script wrote.
+3. For each note, Read `path` from the vault root, at most its first 200 lines. Skip the `context` ones: they are `CLAUDE.md` files, which `close` sums up in one End of day bullet, with no recap.
 4. `recap`: what the note is about, or for an `edited` note what it holds now. Language and style: `notes.language` and `notes.style` in the Settings.
 
 ## Rules
