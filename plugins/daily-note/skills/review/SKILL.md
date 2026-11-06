@@ -38,7 +38,7 @@ allowed-tools: Edit(.daily-note/run/**)
 | `tag` | One choice per id in `data.options` (2 at most) · No tag, erase · Keep | `tag` with `heading` and `pt` |
 | `nonotes` | Fetch the recap · Ignore and erase · Never flag this meeting | Recap: run the `meeting-recap` skill for that meeting (today only), then `done`. Never: `map` with `title` = `data.title` or `heading`, `kind` `mixed` |
 | `map` | `<the project id it was most tagged with, from data.tags>` · mixed · skip · Ask later | `map` with `title`, `kind`, and `pt` for a project. Ask later is `kept` |
-| `update` | Show me the change · Ignore and erase · Keep | See below |
+| `update` | Show me the change · Ignore and erase · Keep | See below. The question names the facts in a few words |
 | `decision` | Add to CLAUDE.md · Comment on `<data.key>` · Both · Nothing | See below. With no key, only the first, Nothing and Keep |
 | `maybe` | It is a decision · Not one, erase · Keep | `decision` with `text` = `data.decision`, `pt`, `key` = `data.ticket`, `link`, `heading` |
 | `waiting` | One question per entry of `data.items`, its `line`: Done · Not for me · Keep | `clear` with the ids answered Done or Not for me. The item is `done` when every entry is cleared, else `kept` |
@@ -59,7 +59,7 @@ An answer is `{"id": <item id>, "outcome": "done" | "erased" | "kept", "actions"
 
 These two need his explicit yes, and the question is that yes, so the question shows the exact text first.
 
-- **`update`, Show me the change:** read the section `data.section` of `data.path`, write the smallest edit that adds `data.fact`, show it as before and after, and ask "Apply?". On yes, make that edit with Edit, then `done`. On no, `kept`.
+- **`update`, Show me the change:** read the sections `data.sections` of `data.path`, and write the smallest edits that bring in every fact of `data.facts`, in the file's own style: a decision in its decisions section, an answered question out of the open questions, a new one in. When the state section changes, its heading takes today's date as `## State as of <YYYY-MM-DD>`. Show each change as before and after, then ask "Apply?". On yes, make those edits with Edit, then `done`. On no, `kept`. Never touch `Where things live` or `Ticket map`.
 - **`decision`:**
   - **CLAUDE.md:** the line `- <YYYY-MM-DD>: <text> (Slack)` goes at the end of the project's `## Decisions` or `## Decisions locked` section, in `Confluence Projects/<pt> - */CLAUDE.md`. No such section: a new `## Decisions` at the end of the file. No project: say so and skip this half.
   - **Jira:** the comment `Decided in Slack on <YYYY-MM-DD>: <text> <link>`, posted with the Atlassian `addCommentToJiraIssue` tool on `data.key`.

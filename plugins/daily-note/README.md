@@ -96,8 +96,12 @@ once before it creates its note.
   during the day is gone and what came in is added. The Review gets one line with the count.
 - **Review:** loose ends (open tasks with no due date, your Gemini action items that are
   not tasks yet, meetings with nothing written, a mixed meeting with notes and no tag),
-  the recurring meetings the Meeting map does not know yet (**Map?**), the `CLAUDE.md`
-  files today made out of date, each Slack decision, and what still waits on you.
+  the recurring meetings the Meeting map does not know yet (**Map?**), each Slack
+  decision, what still waits on you, and, last, what each project `CLAUDE.md` should learn
+  from today (**Update**). That check looks at every project the day touched (a tag, a
+  mention, a decision, a recap, a note, an ask) and lists every fact its file lacks or
+  contradicts: a decision, a status change, a date, an open question answered or raised.
+  Quiet projects are never looked at.
 
 ### The interactive Review
 
@@ -112,7 +116,7 @@ up the same day. **Yes** goes through it with the `review` skill, one question p
 | Tag? | One of the projects it points to · No tag · Keep |
 | No notes | Fetch the recap · Ignore and erase · Never flag this meeting (mixed in the map) |
 | Map? | A project id · mixed · skip · Ask later |
-| Update CLAUDE.md | Show me the change, then apply · Ignore and erase · Keep |
+| Update CLAUDE.md | Show me the change (all of the day's facts, before and after, the State dated today), then apply · Ignore and erase · Keep |
 | Decision | Add to the project CLAUDE.md · Comment on its Jira issue · Both · Nothing |
 | Decision? | It is a decision · Not one · Keep |
 | Waiting on me | For each ask: Done · Not for me · Keep |
@@ -307,7 +311,7 @@ prompt file in `steps/`, readable on its own, and a step can serve more than one
 | `notes` (runs `daynote.py notes`) | end | `Created` and `Updated` properties, the notes themselves | `notes.json`, `note-recaps.json` |
 | `tags` | end | the note, project folders, vault `CLAUDE.md` | `tags.json`, `review-tags.json` |
 | `review-loose-ends` | end | the note, recaps | `review-loose-ends.json` |
-| `review-claude-md` | end | the note, recaps, decisions, `CLAUDE.md` files | `review-claude-md.json` |
+| `review-claude-md` (last) | end | the whole day: the note, recaps, decisions, notes, asks, End of day, `CLAUDE.md` files | `review-claude-md.json` |
 | review (`daynote.py review-list`, `review-apply`) | end, review | the day's Review items, your answers | `review-answers.json`, the note |
 | `correct` | end | `prose.json`, `text-corrector` | `corrections.json` |
 | `wrapup` | end | the note, tasks closed today, recaps | `wrapup.md` |

@@ -1,17 +1,43 @@
 # Step: review-claude-md
 
-**Goal:** flag the `CLAUDE.md` files that today's note makes out of date. Flag only, never edit them.
+**Goal:** keep every project `CLAUDE.md` in step with the work. For each project the day touched, list what its file should learn from today, so the Review can propose the edit. Flag only, never edit the files.
+
+This step runs last, after every other step, so it sees the whole day.
 
 ## Sources
 
-1. **Today:** the note (Read `note` from the vault root), and `recaps.json` and `decisions.json` in the Run folder. A Slack decision about a project is a fact of today like any other.
-2. **Today's projects:** every project tag in the note, the entries of `tags.json`, each recap's `pt` and each decision's `pt`. At most 5, the ones with the most material today first.
-3. **Each project file:** Glob `Confluence Projects/<id> - */CLAUDE.md`. Grep `^## ` in it, with line numbers. Read only, with offset and limit, the sections on its state and its open questions (headings like `## State`, `## Status`, `## Open questions`, `## Undecided`), plus `## One-liner` or `## What this project is`.
+1. **The whole day,** from the Run folder and the note (Read `note` from the vault root):
+   - the note: every section, what Antoine wrote and the lines the run added
+   - `recaps.json`: the meetings' recaps and `my_actions`
+   - `decisions.json`: the Slack decisions
+   - `notes.json` and `note-recaps.json`: the notes of the day
+   - `waiting.json`: what people asked him
+   - `tags.json`, `meetings.json`
+   - `wrapup.md`: the End of day bullets
+2. **The projects the day touched:** any project with at least one of these today:
+   - a `#PT-xxxx` tag in the note, or an entry of `tags.json`
+   - its id, or a name the vault `CLAUDE.md` Project tags section gives it, in the note's text
+   - a `pt` in a recap, a decision, a note of the day, a meeting or a waiting item
+   - a ticket key that its `CLAUDE.md` lists (Grep the keys of today in `Confluence Projects/*/CLAUDE.md` with `output_mode: "files_with_matches"`)
+
+   No limit on the number. A project nothing touched today is not looked at.
+3. **Each project file:** Glob `Confluence Projects/<id> - */CLAUDE.md`. Grep `^## ` in it, with line numbers. Read with offset and limit the sections an update could change: its state (`## State`, `## Status`, `State as of ...`), `## Open questions` or `## Undecided`, `## Decisions` or `## Decisions locked`, the timeline or dates, and `## One-liner` or `## What this project is`. Skip `Where things live` and `Ticket map`.
 4. **The vault file:** in the vault `CLAUDE.md`, only the `## Project tags` section.
 
 ## Do
 
-Flag a project file when today has a fact that it contradicts or lacks and that an agent would need: a decision, a new date, a status change, an open question answered or a new one raised. Also flag an empty `## What this project is`, or a missing state section, when today had real work on that project. A state section dated today was written with today in mind: flag it only for a clear contradiction.
+For each project touched today, list every fact of today that its file lacks or contradicts and that an agent starting on the project would need:
+
+- a decision made, or one undone
+- a status change: started, blocked, in QA, released, dropped
+- a new date, or a date that moved
+- an open question answered, or a new one raised
+- a new risk, dependency or owner
+- scope in or out
+
+Not a fact for the file: a meeting that happened, routine progress, a task done, anything already in the file in other words. A state section dated today was written with today in mind: list only a clear contradiction.
+
+Also flag an empty `## What this project is`, or a missing state section, when today had real work on that project.
 
 Flag the vault file when:
 
@@ -21,18 +47,28 @@ Flag the vault file when:
 ## Rules
 
 - The project files are written for other agents. Their operating rules do not apply here: no extra calls, no edits.
-- One bullet per file at most. Name the section and the fact. Give the State date when it has one.
+- One item per file, with all of the day's facts for it.
+- Facts come from the sources above only. Name ticket keys and dates as the sources give them.
 
 ## Output
 
-Write `review-claude-md.json` in the Run folder, one item per file: `kind` `update`, `key` and `path` the file's path, `section` the heading to change, `fact` today's fact in one sentence, and `text` the bullet. In `text`, link a project file by its full path, so the link opens that file. Made-up example:
+Write `review-claude-md.json` in the Run folder, one item per file:
+
+- `kind`: `update`, and `key` and `path`: the file's path
+- `facts`: the day's facts, one sentence each, in English
+- `sections`: the headings of the file they change, like `## State as of 2026-11-02`, `## Open questions`
+- `text`: the bullet the note shows: the file as a link by its full path, the State date when it has one, then the facts, short. Never a web address.
+
+Made-up example:
 
 ```json
 {"items": [
   {"kind": "update", "key": "Confluence Projects/PT-2311 - Scheduling/CLAUDE.md",
-   "path": "Confluence Projects/PT-2311 - Scheduling/CLAUDE.md", "section": "## State",
-   "fact": "The pilot moved from November to the week of October 5.",
-   "text": "- **Update** [[Confluence Projects/PT-2311 - Scheduling/CLAUDE|PT-2311 CLAUDE.md]] State is from 2026-08-28 and says the pilot starts in November. Today it moved to the week of October 5."}
+   "path": "Confluence Projects/PT-2311 - Scheduling/CLAUDE.md",
+   "sections": ["## State as of 2026-08-28", "## Open questions"],
+   "facts": ["The pilot moved from November to the week of October 5.",
+             "Julie owns the clinic list now, the open question on it is answered."],
+   "text": "- **Update** [[Confluence Projects/PT-2311 - Scheduling/CLAUDE|PT-2311 CLAUDE.md]] State is from 2026-08-28. Today: the pilot moved to the week of October 5, Julie owns the clinic list."}
 ]}
 ```
 
