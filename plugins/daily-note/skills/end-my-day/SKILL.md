@@ -4,8 +4,10 @@ description: >
   End-of-day routine for Antoine's Obsidian vault. Gives a note to each task marked #note,
   after his yes. Completes today's daily note (missing meetings, meetings recorded but not on the calendar, project tags, transcript
   links with a short recap, the notes created or edited today), corrects his writing with
-  text-corrector, catches the decisions made on Slack today, refreshes what waits on him, adds an End of day summary and a Review list, then opens the note. Runs only when invoked by name.
+  text-corrector, catches the decisions made on Slack today, refreshes what waits on him, adds an End of day summary and a Review list, then opens the note. Can close a past day
+  instead: /daily-note:end-my-day yesterday, or a date. Runs only when invoked by name.
 disable-model-invocation: true
+argument-hint: "[yesterday | a weekday | YYYY-MM-DD]"
 allowed-tools: Edit(.daily-note/run/**), mcp__claude_ai_Google_Calendar__list_events, mcp__claude_ai_Gmail__search_threads, mcp__claude_ai_Gmail__get_message, mcp__claude_ai_Google_Drive__get_file_metadata, mcp__claude_ai_Google_Drive__read_file_content, mcp__claude_ai_Atlassian__searchJiraIssuesUsingJql, mcp__claude_ai_Slack__slack_search_public_and_private, mcp__claude_ai_Slack__slack_read_thread, mcp__claude_ai_Slack__slack_read_channel, mcp__claude_ai_Slack__slack_search_channels, mcp__claude_ai_Atlassian__searchConfluenceUsingCql, mcp__claude_ai_Atlassian__atlassianUserInfo
 ---
 
@@ -16,6 +18,17 @@ allowed-tools: Edit(.daily-note/run/**), mcp__claude_ai_Google_Calendar__list_ev
 - Steps folder: `${CLAUDE_PLUGIN_ROOT}/steps/`
 - Settings: `${CLAUDE_PLUGIN_ROOT}/config.json`
 - Run folder: `.daily-note/run/`, in the vault root. The session must be started in the vault root.
+
+## Which day
+
+With no argument, the run closes today. An argument names a past day to close instead: `yesterday`, `hier`, a weekday (`thursday`, `jeudi`: the last one before today), or `YYYY-MM-DD`. Work out the date from today's date. A future day, or anything unclear: ask which day, and stop until he answers.
+
+For a past day:
+
+- Add `--date <YYYY-MM-DD>` to every Script call with `today`, `prose`, `notes`, `map`, `channels` and `close`. `close` stops when that day has no note: show its message and stop. A missing day is never created.
+- Skip step 2, `task-note`: a task note is named after the day it is made.
+- In every step, "today" means that day: the steps read `date`, `day_start`, `day_end` and `now` from the `today` output, which already holds that day, with `now` at 23:59.
+- Notes of the day: a note edited that day and again later shows on the later day. Say so in the final report.
 
 ## Run order
 

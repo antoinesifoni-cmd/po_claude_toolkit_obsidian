@@ -1,17 +1,20 @@
 # daily-note
 
-A morning and an evening routine for an Obsidian vault, driven by Claude Code, plus two
-skills on request: one recaps a single meeting, one gives a task a note to write in.
+A morning and an evening routine for an Obsidian vault, driven by Claude Code, plus three
+skills on request: one recaps a single meeting, one gives a task a note to write in, one
+builds a catch-up note after time off.
 
 ```
 /daily-note:start-my-day
 /daily-note:end-my-day
+/daily-note:end-my-day yesterday
 ```
 
 The two routines run only when you type them. Claude never starts them on its own,
-because they write to a vault that has no undo. `meeting-recap` and `task-note` are the
-exceptions: say "fetch resume of this meet" or "make a note for this task" and they run,
-since asking is the whole point.
+because they write to a vault that has no undo. `meeting-recap`, `task-note` and
+`im-back` are the exceptions: say "fetch resume of this meet", "make a note for this
+task" or "I'm back" and they run, since asking is the whole point. `im-back` still asks
+once before it creates its note.
 
 ## What lands in the note
 
@@ -20,7 +23,10 @@ since asking is the whole point.
 - **Summary:** 3 to 5 short bullets on how the day looks, built from your meetings, tasks due or
   overdue, the Gmail Jira labels, your open Jira issues, what waits on you and each
   project's `CLAUDE.md`.
-- **Alert:** the linked Confluence pages that someone changed on Confluence, and the
+- **Alert:** two reminders from the script itself: the last note was never closed
+  (**Not closed**, with the command to close it), and your last note is 3 workdays old or
+  more (**Back from time off?**, say "I'm back"). Then the linked Confluence pages that
+  someone changed on Confluence, and the
   links that lost their note after a rename, move or delete in the vault (**Link lost**),
   from `confluence-sync`.
 - **Waiting on me:** what people asked you in the last 5 days and you have not answered,
@@ -142,6 +148,28 @@ The file is context, so it never shows as a note of the day.
 `daynote.py channels`, run from the vault root, prints both lists and which projects are
 ongoing. A group DM's id is the `C0...` part of its link in Slack.
 
+**end-my-day on a past day** closes a day you did not close:
+`/daily-note:end-my-day yesterday`, a weekday (`thursday`, `jeudi`) or `2026-11-05`. The
+whole evening runs for that day: meetings, recaps, tags, corrections, decisions, Waiting on
+me, End of day and Review. It never creates a missing day: no note, nothing written. Task
+notes are skipped, since a task note is named after the day it is made. A note edited
+that day and again later shows as a note of the later day.
+
+**im-back** builds one note on your first day back: `Day2Day notes/<date> - Back from OOO`.
+The range comes from your Google Calendar out of office event, else from your last note
+to yesterday, and you confirm it first. The note holds:
+
+- **Summary:** 5 bullets on what needs you first
+- **Waiting on me:** every ask of the whole range, up to 30
+- **One section per project**, then **Other**: the meetings you missed with a short recap
+  and the transcript (personal events left out by the Meeting map), the decisions made in
+  the project's Slack channels, the Jira issues of yours that moved, with their status
+  now, and the linked Confluence pages that moved
+- **Your tasks:** a live Tasks query of what came due while you were away and is still
+  open, so nothing is copied
+
+It never writes over a note: rename or delete it to build it again.
+
 **meeting-recap** does the recap part for one meeting, any time: "fetch resume of this
 meet", "get the recap of the sprint review". With no meeting named, it takes the one
 that ended last.
@@ -239,7 +267,8 @@ prompt file in `steps/`, readable on its own, and a step can serve more than one
 | `meetings` | all | Google Calendar | `meetings.json` |
 | `unscheduled` | end, recap | Gemini "Notes:" emails in Gmail | adds to `meetings.json` |
 | map (`daynote.py map`) | start, end | the Meeting map, the last 3 weeks of daily notes | `meetings.json`, `review-map.md` |
-| `alert-confluence` | start | `confluence-sync:confluence-status` | `alert-confluence.md` |
+| `alert-confluence` | start, back | `confluence-sync:confluence-status` | `alert-confluence.md` |
+| `back` | im-back | the calendar over the range, Gemini notes, project Slack channels, Jira, `alert-confluence` | `back.json`, `back-summary.md` |
 | `waiting` | start, end | Slack mentions, Gmail mention and share emails, your Confluence comments, Jira comments | `waiting.json` |
 | `summary` | start | meetings, tasks, Gmail, Jira, `waiting.json`, project `CLAUDE.md` | `summary.md` |
 | `daynote.py prose` | end | the note | `prose.json` |
@@ -258,7 +287,8 @@ daily note, and `scripts/tasknote.py` the only code that changes a task line or 
 task note, through the Obsidian CLI. `scripts/tests/test_write.py` covers the morning,
 `scripts/tests/test_close.py` the evening and the recap, `scripts/tests/test_notes.py` the
 notes of the day, `scripts/tests/test_map.py` the Meeting map, `scripts/tests/test_waiting.py`
-Waiting on me, `scripts/tests/test_decisions.py` the Slack channels and decisions, `scripts/tests/test_tasknote.py`
+Waiting on me, `scripts/tests/test_decisions.py` the Slack channels and decisions, `scripts/tests/test_catchup.py`
+past days, the morning reminders and the I'm back note, `scripts/tests/test_tasknote.py`
 the task notes.
 
 ## Settings
