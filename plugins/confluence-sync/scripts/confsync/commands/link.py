@@ -1,10 +1,14 @@
-"""link, link-folder, find, relink and unlink - attaching notes to pages that exist.
+"""link, link-folder, find, relink, unlink, add and ignore - attaching notes to pages that exist.
 
 One `link` command covers pages and folders because every caller starts from the same
 place: a pasted reference and a local path. See parse_ref for how the two are told apart.
 
 relink and unlink repair what reconcile.py reports after a rename or delete in the vault:
 they only rewrite mapping.json / folders.json, after a backup, and never contact the site.
+
+add and ignore act on what newpages.py reports as new on Confluence: add links the page
+or folder into the matching vault folder (a folder with everything inside it) and pulls
+the pages; ignore remembers it so it is never reported again. Neither writes to Confluence.
 """
 
 import sys
@@ -16,6 +20,7 @@ from ..config import (FOLDERS_FILE, MAPPING_FILE, VAULT, api, backup_state, get_
 from ..frontmatter import (apply_frontmatter, build_confluence_frontmatter,
                            split_frontmatter)
 from ..hashing import HASH_ALGO, body_hash, local_body_hash
+from .. import newpages
 from ..reconcile import note_page_id
 from ..rest import get_folder_meta, get_page_meta, parse_ref, resolve_node
 from .sync import pull_one
@@ -225,3 +230,70 @@ def cmd_unlink(args):
         return
 
     sys.exit(f"{f} is not linked.")
+
+
+def add_node(cfg, s, node, places: dict, mapping) -> list:
+    """Link one new page or folder where newpages says it belongs. Returns what it linked."""
+    where = newpages.local_dir(node, places)
+    if where is None:
+        sys.exit(f"Nothing above \"{node.get('title')}\" is linked in the vault, so it has no place "
+                 f"there. Link it by hand: conf.py link <path> {node['id']}")
+    done = []
+    # The folders between the nearest linked ancestor and the node, made and linked first.
+    chain = node.get("ancestors") or []
+    base = next(i for i in range(len(chain) - 1, -1, -1) if str(chain[i].get("id")) in places)
+    path = VAULT / places[str(chain[base]["id"])] if places[str(chain[base]["id"])] else VAULT
+    for anc in chain[base + 1:]:
+        if anc.get("type") != "folder":
+            continue
+        path = path / newpages.safe_name(anc.get("title") or "")
+        if str(anc["id"]) not in places:
+            path.mkdir(parents=True, exist_ok=True)
+            places[str(anc["id"])] = link_folder(cfg, s, str(anc["id"]), path)
+            done.append(places[str(anc["id"])])
+    name = newpages.safe_name(node.get("title") or "")
+    if node.get("type") == "folder":
+        target = path / name
+        target.mkdir(parents=True, exist_ok=True)
+        places[str(node["id"])] = link_folder(cfg, s, str(node["id"]), target)
+        done.append(places[str(node["id"])])
+        return done
+    target = path / f"{name}.md"
+    if target.exists():
+        sys.exit(f"{rel(target)} already exists and is not linked to this page. Rename it, or "
+                 f"link it yourself: conf.py link \"{rel(target)}\" {node['id']}")
+    f = link_page(cfg, s, str(node["id"]), target, mapping)
+    pull_one(cfg, s, mapping, f, create_dirs=True)
+    places[str(node["id"])] = f.rsplit("/", 1)[0] if "/" in f else ""
+    done.append(f)
+    return done
+
+
+def cmd_add(args):
+    """add <id> - bring a new page or folder that status reported into the vault."""
+    cfg = get_config()
+    s = api(cfg)
+    mapping = load_json(MAPPING_FILE, {})
+    places = newpages.linked_places(mapping, load_json(FOLDERS_FILE, {}))
+    node_id = parse_ref(args.ref)[0]
+    if node_id in places:
+        print(f"{node_id} is already linked in the vault.")
+        return
+    backup_state()
+    node = newpages.fetch_node(cfg, s, node_id)
+    added = add_node(cfg, s, node, places, mapping)
+    if node.get("type") == "folder":
+        for child in newpages.descendants(cfg, s, node_id):
+            if str(child["id"]) not in places and str(child["id"]) not in newpages.ignored_ids():
+                added += add_node(cfg, s, child, places, mapping)
+    print(f"Added {len(added)}: " + ", ".join(added))
+
+
+def cmd_ignore(args):
+    """ignore <id> - never report this new page or folder again."""
+    cfg = get_config()
+    s = api(cfg)
+    node = newpages.fetch_node(cfg, s, parse_ref(args.ref)[0])
+    newpages.remember_ignored(node)
+    print(f"Ignored \"{node.get('title')}\" ({node.get('type')} {node['id']}): it will not be "
+          f"reported as new again. To undo, remove it from .confsync/ignored.json.")

@@ -125,7 +125,7 @@ except ImportError as e:
     sys.exit(f"Missing dependency: {e.name}. Run: pip install requests markdown markdownify pyyaml")
 
 from confsync.commands.create import cmd_create_folder, cmd_create_page
-from confsync.commands.link import cmd_find, cmd_link, cmd_relink, cmd_unlink
+from confsync.commands.link import cmd_add, cmd_find, cmd_ignore, cmd_link, cmd_relink, cmd_unlink
 from confsync.commands.scaffold import cmd_scaffold
 from confsync.commands.status import cmd_rebaseline, cmd_status
 from confsync.commands.sync import cmd_pull, cmd_push, cmd_resolve
@@ -158,6 +158,10 @@ def main():
     sp = sub.add_parser("relink", help="move a link after a rename in the vault")
     sp.add_argument("old"); sp.add_argument("new"); sp.set_defaults(fn=cmd_relink)
 
+    sp = sub.add_parser("add", help="bring a page or folder that status reported as new into the vault")
+    sp.add_argument("ref"); sp.set_defaults(fn=cmd_add)
+    sp = sub.add_parser("ignore", help="never report this new page or folder again")
+    sp.add_argument("ref"); sp.set_defaults(fn=cmd_ignore)
     sp = sub.add_parser("unlink", help="forget a note's or folder's link")
     sp.add_argument("path"); sp.set_defaults(fn=cmd_unlink)
 

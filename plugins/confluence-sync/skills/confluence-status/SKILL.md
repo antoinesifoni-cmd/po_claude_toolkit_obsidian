@@ -70,6 +70,21 @@ found again. These lines only report: nothing has been changed.
 For any of them, hand off to the confluence-link skill ("Fix links after a rename"). It asks
 the user about each one. Never run `relink` or `unlink` from here.
 
+## New on Confluence
+
+A whole-vault status ends with the pages and folders created in the last 14 days under
+what the vault links (linked folders and linked pages, at any depth) that are not in the
+vault yet:
+
+| Line | Meaning |
+|---|---|
+| `NEW: "<title>" (page N) in <folder>, by <who>, <date>` | a page someone created there |
+| `NEW FOLDER: "<title>" (folder N) in <folder>, K pages inside, ...` | a new folder, its new pages counted on this line |
+| `NEW: check failed (...)` | the search failed: the lines above are still right |
+
+They only report. To add one to the vault, or to never see it again, hand off to the
+confluence-link skill ("New pages on Confluence"). Never run `add` or `ignore` from here.
+
 A `CONFLICT` line is a *prediction*, not damage. Nothing has happened yet - it is telling
 you that a plain pull would have to choose. That is exactly the moment to read
 `${CLAUDE_PLUGIN_ROOT}/references/conflicts.md` and follow the merge flow, before either

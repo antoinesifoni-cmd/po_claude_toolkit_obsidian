@@ -42,6 +42,8 @@ Claude runs these for you. Listed so you can see what the plugin can actually do
 | `find <title> [--space K]` | search Confluence by title, to get an id without leaving the editor |
 | `link <path> <url-or-id>` | map a note **or** folder to an existing page/folder, then pull it |
 | `link-folder <path> <url-or-id>` | alias for `link`, forced to folder |
+| `add <id>` | bring a page or folder that status reported as new into the vault: the note (or folder, with its pages) goes in the matching folder, linked and pulled |
+| `ignore <id>` | never report this new page or folder again (`.confsync/ignored.json`) |
 | `relink <old> <new>` | a linked note or folder was renamed or moved in the vault: move its link, keeping its sync state. Never renames the page |
 | `unlink <path>` | forget a note's or folder's link, after it was deleted. The Confluence page is not touched |
 | `create-page <file> --parent <id> [--draft]` | create a **new** page from a note, and link it. `--draft` keeps it unpublished until you publish it in Confluence |
@@ -57,6 +59,11 @@ Claude runs these for you. Listed so you can see what the plugin can actually do
   it, because a just-linked note is usually empty or stale and its first push would
   otherwise publish over the real page (`--no-pull` opts out).
 - **`find` by title.** Getting a page id no longer means going to Confluence to copy a URL.
+- **New pages don't go unnoticed.** A whole-vault `status` ends with the pages and
+  folders created in the last 14 days under your linked folders and pages, at any depth,
+  that are not in the vault: `NEW: "Rule QA checklist" (page N) in <folder>, by Anaïs`.
+  One search does it. A new folder is one line with its page count. Say "add it to my
+  vault" (`add`) or "ignore it" (`ignore`), after Claude asks about each one.
 - **Renames in the vault don't lose the link.** A renamed or moved note is found again by
   the `page_id` in its properties. `status` reports `RENAMED?`, `MISSING`, `AMBIGUOUS`
   (and the same for folders) instead of a ghost "push needed". Say "fix my Confluence
