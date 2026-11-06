@@ -1047,11 +1047,35 @@ def add_recaps(lines: list, recaps, reserved: set, note_name: str, tail_titles: 
     return lines, ", ".join(out)
 
 
-def build_eod_block(run: Path, review: list) -> list:
+def context_line(notes) -> str:
+    """The CLAUDE.md files edited today as one bullet: "- Project context updated #PT-1760
+    #PT-1778, vault". A project's file gives its tag, the vault's root file "vault", any
+    other the name of its folder. Empty when none was edited."""
+    tags, others = [], []
+    for n in notes or []:
+        if n.get("kind") != "context":
+            continue
+        pt = str(n.get("pt") or "")
+        path = str(n.get("path") or "")
+        if PROJECT_ID.match(pt):
+            label, into = "#" + pt, tags
+        elif "/" not in path:
+            label, into = "vault", others
+        else:
+            label, into = inline(path.rsplit("/", 2)[-2], 60), others
+        if label and label not in into:
+            into.append(label)
+    if not tags and not others:
+        return ""
+    return "- Project context updated " + " ".join(tags) + (", " if tags and others else "") + ", ".join(others)
+
+
+def build_eod_block(run: Path, review: list, context: str = "") -> list:
     wrapup = []
     if (run / "wrapup.md").exists():
         wrapup = summary_lines(read_text(run / "wrapup.md"))
-    return [EOD_BEGIN, "", "# End of day", "", *(wrapup or [NO_WRAPUP]), "",
+    wrapup = (wrapup or [NO_WRAPUP]) + ([context] if context else [])
+    return [EOD_BEGIN, "", "# End of day", "", *wrapup, "",
             "## Review", "", *review, "", EOD_END]
 
 
@@ -1110,7 +1134,8 @@ def close(root: Path, now: datetime = None, past: bool = False) -> dict:
     items = [i for i in items if i["id"] not in set(memory.get("ids") or [])]
     save_review_items(root, d["day"], items)
     review = review_lines(items, memory.get("trace"), ran)
-    lines, block_state = put_eod_block(lines, build_eod_block(run, review), rel, tail_titles)
+    context = context_line(read_list(run / "notes.json", "notes"))
+    lines, block_state = put_eod_block(lines, build_eod_block(run, review, context), rel, tail_titles)
 
     result = {"note": rel, "created": not d["exists"], "corrections": fixes,
               "meetings": added, "tags": tags, "recaps": recaps, "notes": notes,
@@ -1219,6 +1244,8 @@ def notes_cmd(root: Path, now: datetime = None) -> dict:
             kind, hm = "edited", changed[1]
         else:
             continue
+        if p.name == "CLAUDE.md":
+            kind = "context"   # agent context: one End of day bullet, no section, no recap
         heading = LEAD_ID.sub("", DATE_PREFIX.sub("", p.stem)).strip() or p.stem
         found.append({"path": rel, "name": p.stem, "heading": heading,
                       "pt": project_of(rel, props.get("tags")), "kind": kind,
@@ -1247,6 +1274,7 @@ def add_notes(root: Path, lines: list, notes, recaps, note_name: str, tail_title
     linked in today's note, by an earlier run or by hand, is left out."""
     if notes is None:
         return lines, "not run"
+    notes = [n for n in notes if n.get("kind") != "context"]   # the End of day bullet has them
     texts = {str(r.get("path")): summary_line(str(r.get("recap") or "")) for r in recaps or []}
     added = linked = refused = 0
     for n in notes:

@@ -121,6 +121,27 @@ class NotesTests(unittest.TestCase):
         task = notes["26-09-23 - Ask Julie for dates"]
         self.assertEqual((task["heading"], task["pt"]), ("Ask Julie for dates", "PT-2402"))
 
+    def test_claude_md_edits_are_one_end_of_day_bullet(self):
+        self.put("Day2Day notes/2026-09-23.md", NOTE)
+        self.put("Confluence Projects/PT-2311 - Scheduling/CLAUDE.md",
+                 props("2026-08-01", "2026-09-23T16:40", tags=["PT-2311"]))
+        self.put("Confluence Projects/PT-2402 - Consent/CLAUDE.md", props("2026-09-23T09:05", "2026-09-23T11:00"))
+        self.put("CLAUDE.md", props("2026-01-01", "2026-09-23T12:00"))
+        self.put("Library/SQL scripts/CLAUDE.md", props("2026-01-01", "2026-09-23T13:00"))
+        self.put("Day2Day notes/CLAUDE.md", props("2026-01-01", "2026-09-23T13:30"))   # the map: left out
+        self.put("Ideas/Waiting room screen.md", props("2026-09-01", "2026-09-23T14:05"))
+        self.scan()
+        notes = json.loads((self.run_dir / "notes.json").read_text(encoding="utf-8"))["notes"]
+        self.assertEqual(sorted(n["kind"] for n in notes), ["context"] * 4 + ["edited"])
+        (self.run_dir / "wrapup.md").write_text("- Pilot checklist done\n", encoding="utf-8")
+        result = daynote.close(self.root, self.now)
+        self.assertEqual(result["notes"], "added 1")   # only the idea gets a section
+        text = self.note.read_text(encoding="utf-8")
+        self.assertNotIn("# CLAUDE", text)
+        self.assertIn("# End of day\n\n- Pilot checklist done\n"
+                      "- Project context updated #PT-2402 #PT-2311, vault, SQL scripts\n", text)
+        self.assertEqual(daynote.context_line([]), "")
+
     def test_close_puts_each_note_in_time_order_once(self):
         self.put("Day2Day notes/2026-09-23.md", NOTE)
         self.put("Projects/PT-2311 - Scheduling/PT-2311 - Pilot checklist.md",
