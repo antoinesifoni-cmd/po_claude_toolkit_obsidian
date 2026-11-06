@@ -126,6 +126,8 @@ Apply the guide to the draft, its context and the PO's answers:
 - The story passes the size limit and you couldn't ask: write one story and suggest
   the split for step 6.
 - Keep what the user already filled: Mocks links, Technical Details, References.
+- Every Figma link you found for this story goes in Mocks (see "Mocks" in the guide),
+  wherever it came from: the draft, the ticket, a comment, the epic, the PO's answers.
 - Write in the draft's language. A French draft gives a French story.
 
 ## 5. Check it
@@ -148,7 +150,9 @@ Before answering, go through the guide once more and fix the story:
    ticket's own first.
 3. After a `---` line, **For you, not for the ticket:** a short list of what's left:
    assumptions you made, Vocab Table cells still empty, a split you suggest, a missing
-   Figma link. Omit when empty.
+   Figma link. When the story has a Figma link and came from Jira: "Add the Figma
+   link to the ticket's Designs panel with Add design" (the Atlassian connector can't
+   do it). Omit when empty.
 4. One last line, only when the story came from Jira or a file: "Want me to put it in
    MYLE-123 (title and description)?" or "Want me to put it in the note?". After a split, add
    "and create the 2 other stories, linked to it?".

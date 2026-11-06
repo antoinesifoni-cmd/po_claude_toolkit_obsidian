@@ -83,6 +83,14 @@ Formatting:
   line, no bullets.
 - No emojis.
 
+## Mocks
+
+- Every Figma link that shows this story's screens, one per line, each with a short
+  label naming what it shows: `[Delete confirmation pop-up (iOS and Android)](url)`.
+- Links exactly as found, never rebuilt or made up. A link to a whole file only when
+  there is none to a frame.
+- No Figma link and no image: keep the placeholder.
+
 ## Description
 
 - **Role:** the real one, using the product's own word for it (clinician,
