@@ -174,10 +174,11 @@ class MapTests(unittest.TestCase):
         self.meetings({"meetings": [{"start": "10:00", "end": "10:30", "title": "Design sync",
                                      "heading": "Design sync", "pt": None}]})
         out = daynote.map_cmd(self.root, self.now)
-        review = (self.run_dir / "review-map.md").read_text(encoding="utf-8")
+        items = json.loads((self.run_dir / "review-map.json").read_text(encoding="utf-8"))["items"]
         self.assertEqual(out["ask"], 1)
-        self.assertIn('**Map?** "Design sync" came 4 times in 3 weeks, untagged 3 times.', review)
-        self.assertIn("Day2Day notes/CLAUDE.md", review)
+        self.assertEqual((items[0]["kind"], items[0]["title"], items[0]["days"]), ("map", "Design sync", 4))
+        self.assertIn('**Map?** "Design sync" came 4 times in 3 weeks, untagged 3 times.', items[0]["text"])
+        self.assertIn("Day2Day notes/CLAUDE.md", items[0]["text"])
 
     def test_not_asked_when_rare_mapped_or_tagged(self):
         self.put("Day2Day notes/CLAUDE.md", MAP)
@@ -191,7 +192,8 @@ class MapTests(unittest.TestCase):
         ]})
         out = daynote.map_cmd(self.root, self.now)
         self.assertEqual(out["ask"], 0)
-        self.assertEqual((self.run_dir / "review-map.md").read_text(encoding="utf-8"), "")
+        self.assertEqual(json.loads((self.run_dir / "review-map.json").read_text(encoding="utf-8")),
+                         {"items": []})
 
     def test_seen_lists_the_last_three_weeks(self):
         self.put("Day2Day notes/CLAUDE.md", MAP)

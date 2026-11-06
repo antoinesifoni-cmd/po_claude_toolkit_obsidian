@@ -35,7 +35,7 @@ For a past day:
 This list is the only place the order lives. To add, move or remove a step, edit it here.
 
 1. **Start:** run the Script with `today`. If it fails, show its message and stop. Keep its JSON: the steps use `date`, `note`, `now`, `day_start` and `day_end`.
-2. Run the `task-note` step in batch, with `scan`. Read `<Steps folder>/task-note.md` first. It is the only question of the run. If it fails, remember its message and go on.
+2. Run the `task-note` step in batch, with `scan`. Read `<Steps folder>/task-note.md` first. Its question and the review offer at the end are the only questions of the run. If it fails, remember its message and go on.
 3. Run the Script with `prose`. It saves the lines Antoine wrote in the note, for the `correct` step. If it fails, remember its message and go on.
 4. Read the Settings file. If it is missing or is not valid JSON, say so and stop.
 5. Run these steps in order. Read `<Steps folder>/<step>.md` just before running it.
@@ -52,6 +52,7 @@ This list is the only place the order lives. To add, move or remove a step, edit
    11. `correct`
    12. `wrapup`
 6. **End:** run the Script with `close`. It writes the note, then opens it in Obsidian.
+7. **Review.** When `close` returns `review` above 0, give the final report first, then ask once: "Review: <N> items. Do you have time for the review now?" Yes: run the `daily-note:review` skill, with the same `--date` for a past day. Later: stop, the list stays in the note, and "do the review" picks it up today. With 0 items, no question.
 
 ## Rules for the whole run
 
@@ -80,7 +81,7 @@ Day2Day notes/2026-09-23 closed and opened.
 - decisions: 2 found in 9 threads, 1 unsure
 - tags: 1 added (Design check-in, PT-2402), 1 unsure
 - waiting: 3 open, 2 answered today
-- review: 2 loose ends, 1 CLAUDE.md to update
+- review: 2 loose ends, 1 CLAUDE.md to update, 5 items in all
 - correct: 4 applied, 1 refused
 - wrapup: ok, not checked: none
 - close: backup .daily-note/backups/2026-09-23_173012.md

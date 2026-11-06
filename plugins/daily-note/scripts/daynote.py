@@ -25,6 +25,10 @@ Commands (run from the vault root, the folder that holds .obsidian/):
           for the recurring meetings it does not know
   seen    print the meeting headings of the last 3 weeks of daily notes, with how often
           each was tagged, to propose a first Meeting map. Writes nothing
+  review-list   the day's open Review items, for the review skill. Writes nothing
+  review-apply  apply the review skill's answers (run/review-answers.json): new tasks, due
+          dates, done tasks, tags, Meeting map rows, decision lines, cleared Waiting on me
+          items. Rewrites the Review with what is kept and a trace, and remembers the rest
   back    I'm back: build "<date> - Back from OOO.md" from back.json, back-summary.md and
           waiting.json. Stops when that note exists
   --date YYYY-MM-DD  with today, prose, close, notes, map or channels: work on a past day,
@@ -1043,22 +1047,10 @@ def add_recaps(lines: list, recaps, reserved: set, note_name: str, tail_titles: 
     return lines, ", ".join(out)
 
 
-def build_eod_block(run: Path, waiting=None) -> list:
+def build_eod_block(run: Path, review: list) -> list:
     wrapup = []
     if (run / "wrapup.md").exists():
         wrapup = summary_lines(read_text(run / "wrapup.md"))
-    # A review step that found nothing leaves its file empty, so "nothing" is said once.
-    files = sorted(run.glob("review-*.md"))
-    review = []
-    for f in files:
-        review += alert_lines(read_text(f))
-    if waiting:
-        old = sum(age >= 2 for age, _ in waiting)
-        review.append(f"- **Waiting on me** {len(waiting)} still open"
-                      + (f", {old} for 2 days or more" if old else "")
-                      + ". The list is at the top of the note.")
-    if not review:
-        review = [NOTHING_TO_FLAG if files else NO_REVIEW]
     return [EOD_BEGIN, "", "# End of day", "", *(wrapup or [NO_WRAPUP]), "",
             "## Review", "", *review, "", EOD_END]
 
@@ -1113,11 +1105,17 @@ def close(root: Path, now: datetime = None, past: bool = False) -> dict:
                                      rel, tail_titles)
     waiting = read_waiting(root, run, d["day"])
     lines, waiting_state = put_waiting(lines, waiting, rel)
-    lines, block_state = put_eod_block(lines, build_eod_block(run, waiting), rel, tail_titles)
+    items, ran = collect_review(run, waiting, read_list(run / "decisions.json", "decisions"))
+    memory = review_memory(root).get(d["day"].isoformat(), {})
+    items = [i for i in items if i["id"] not in set(memory.get("ids") or [])]
+    save_review_items(root, d["day"], items)
+    review = review_lines(items, memory.get("trace"), ran)
+    lines, block_state = put_eod_block(lines, build_eod_block(run, review), rel, tail_titles)
 
     result = {"note": rel, "created": not d["exists"], "corrections": fixes,
               "meetings": added, "tags": tags, "recaps": recaps, "notes": notes,
-              "decisions": decisions, "waiting": waiting_state, "block": block_state,
+              "decisions": decisions, "waiting": waiting_state, "review": len(items),
+              "block": block_state,
               "backup": None}
     written, result["backup"] = save(root, d, lines)
     if not written:
@@ -1469,6 +1467,319 @@ def back_cmd(root: Path, now: datetime = None) -> dict:
             "waiting": "not checked" if waiting is None else len(waiting)}
 
 
+# ---------------------------------------------------------------- the interactive Review
+
+REVIEW_DIR = "review"                  # in STATE_DIR: <date>.json, the day's open items
+REVIEW_MEMORY = "review-done.json"     # in STATE_DIR: {date: {"ids": [...], "trace": "..."}}
+REVIEW_KEEP_DAYS = 60
+REVIEW_KIND = re.compile(r"[^a-z-]")
+DATE_VALUE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+BLOCK_ID = re.compile(r"(\s\^[\w-]+)$")
+OPEN_TASK = re.compile(r"^(\s*[-*+]\s+)\[[ /]\]")
+
+
+def review_id(kind: str, key) -> str:
+    return f"{kind}:{plain(key)[:120]}"
+
+
+def review_text(text) -> str:
+    text = str(text or "").strip()
+    found = alert_lines(text if text.startswith("- ") else "- " + text)
+    return found[0] if found else ""
+
+
+def collect_review(run: Path, waiting, decisions):
+    """The day's Review as items {id, kind, text, data}, and whether any review step ran.
+    A step writes review-<name>.json items, or plain review-<name>.md bullets."""
+    items, ran = [], False
+    for f in sorted(run.glob("review-*.md")):
+        ran = True
+        for line in alert_lines(read_text(f)):
+            items.append({"id": review_id("note", line), "kind": "note", "text": line, "data": {}})
+    for f in sorted(run.glob("review-*.json")):
+        found = read_list(f, "items")
+        if found is None:
+            continue
+        ran = True
+        for it in found:
+            kind = REVIEW_KIND.sub("", str(it.get("kind") or "").lower()) or "note"
+            text = review_text(it.get("text"))
+            if text:
+                data = {k: v for k, v in it.items() if k not in ("id", "kind", "key", "text")}
+                items.append({"id": review_id(kind, it.get("key") or text), "kind": kind,
+                              "text": text, "data": data})
+    for d in decisions or []:
+        if decision_line(d):
+            key = str(d.get("key") or "")
+            where = "the project CLAUDE.md" + (f" or {key}" if TICKET.match(key) else "")
+            items.append({"id": review_id("decision", d.get("link") or d.get("text")),
+                          "kind": "decision",
+                          "text": f"- **Decision** {inline(d.get('text'), 120)}: add it to {where}?",
+                          "data": {k: d.get(k) for k in ("text", "pt", "key", "link")}})
+    if waiting:
+        ran = True
+        old = sum(age >= 2 for age, _ in waiting)
+        items.append({"id": "waiting:list", "kind": "waiting",
+                      "text": f"- **Waiting on me** {len(waiting)} still open"
+                              + (f", {old} for 2 days or more" if old else "")
+                              + ". The list is at the top of the note.",
+                      "data": {"items": [{"id": it.get("id"), "line": waiting_line(age, it)}
+                                         for age, it in waiting]}})
+    out, seen = [], set()
+    for i in items:
+        if i["id"] not in seen:
+            seen.add(i["id"])
+            out.append(i)
+    return out, ran or decisions is not None
+
+
+def review_lines(items: list, trace, ran: bool) -> list:
+    out = [trace] if trace else []
+    out += [i["text"] for i in items]
+    if not items and not trace:
+        out = [NOTHING_TO_FLAG if ran else NO_REVIEW]
+    return out
+
+
+def review_memory(root: Path) -> dict:
+    data = read_dict(root / STATE_DIR / REVIEW_MEMORY)
+    return data if isinstance(data, dict) else {}
+
+
+def save_json(path: Path, data):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "w", encoding="utf-8", newline="") as f:
+        json.dump(data, f, ensure_ascii=False, indent=1)
+
+
+def save_review_items(root: Path, day: date, items: list):
+    save_json(root / STATE_DIR / REVIEW_DIR / f"{day.isoformat()}.json",
+              {"date": day.isoformat(), "items": items})
+
+
+def review_list(root: Path, now: datetime = None) -> dict:
+    """The open Review items of a day, for the review skill. Writes nothing."""
+    now = now or datetime.now().astimezone()
+    cfg = vault_config(root)
+    day = now.date()
+    data = read_dict(root / STATE_DIR / REVIEW_DIR / f"{day.isoformat()}.json") or {}
+    done = set(review_memory(root).get(day.isoformat(), {}).get("ids") or [])
+    items = [i for i in data.get("items") or [] if isinstance(i, dict) and i.get("id") not in done]
+    return {"date": day.isoformat(), "note": note_rel(cfg, day), "items": items}
+
+
+def find_task(lines: list, text: str, skip: set):
+    want = str(text or "").strip()
+    return next((i for i, l in enumerate(lines) if i not in skip and want and l.strip() == want), None)
+
+
+def with_field(line: str, field: str) -> str:
+    """A Tasks field at the end of a task line, before its block id when it has one."""
+    m = BLOCK_ID.search(line)
+    if m:
+        return line[:m.start()] + " " + field + m.group(1)
+    return line.rstrip() + " " + field
+
+
+def new_task(a: dict, today: date) -> str:
+    text = inline(a.get("text"), 200)
+    if not text:
+        return ""
+    parts = ["- [ ]", text]
+    pt = str(a.get("pt") or "")
+    if PROJECT_ID.match(pt) and "#" + pt not in text:
+        parts.append("#" + pt)
+    if a.get("note"):
+        parts.append("#note")
+    when = str(a.get("date") or "")
+    if DATE_VALUE.match(when):
+        parts.append("📅 " + when)
+    parts.append("➕ " + today.isoformat())
+    return " ".join(parts)
+
+
+def insert_task(lines: list, line: str, heading, note_name: str, tail_titles: set) -> list:
+    """Under its meeting, else under # Task (after its "Created today" line when there is
+    one), else at the end."""
+    secs = layout(lines, note_name, tail_titles)[2]
+    key = title_key(heading)
+    k = next((i for i, s in enumerate(secs) if key and title_key(s["title"]) == key), None)
+    if k is not None:
+        at = section_end(lines, secs[k])
+        above = lines[at - 1]
+        gap = at - 1 > secs[k]["at"] and not (
+            above.lstrip().startswith(("- ", "* ")) or time_range(above)
+            or TAG.sub("", above).strip() == "" or note_time(above))
+        return lines[:at] + ([""] if gap else []) + [line] + lines[at:]
+    skip = managed(lines, note_name)
+    task = next((i for i, l in enumerate(lines) if i not in skip and H1.match(l)
+                 and H1.match(l).group(1).strip() == "Task"), None)
+    if task is None:
+        return lines + [line]
+    at = task + 1
+    if at < len(lines) and re.match(r"^#{2,6}\s+created today\s*$", lines[at].strip(), re.I):
+        at += 1
+    return lines[:at] + [line] + lines[at:]
+
+
+def add_map_row(root: Path, cfg: dict, a: dict) -> bool:
+    title = inline(a.get("title"), 60)
+    kind = str(a.get("kind") or "")
+    pt = LOOSE_ID.match(str(a.get("pt") or "").upper())
+    if not title or kind not in MAP_KINDS or (kind == "project" and not pt):
+        return False
+    row = f"| {title} | {kind} | {pt.group(1) + '-' + pt.group(2) if kind == 'project' else ''} |"
+    path = root / map_rel(cfg)
+    raw = read_text(path) if path.exists() else ""
+    text, eol, bom = split_eol(raw)
+    lines = text.split("\n") if raw else []
+    head = next((i for i, l in enumerate(lines) if MAP_HEADING.match(l.strip())), None)
+    if head is None:
+        lines += ["", "## Meeting map", "", "| Title starts with | Kind | Project |",
+                  "|---|---|---|", row, ""]
+    else:
+        stop = next((i for i in range(head + 1, len(lines)) if HEADING.match(lines[i])), len(lines))
+        rows = [i for i in range(head + 1, stop) if lines[i].strip().startswith("|")]
+        at = rows[-1] + 1 if rows else head + 1
+        lines[at:at] = [row] if rows else ["", "| Title starts with | Kind | Project |", "|---|---|---|", row]
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "w", encoding="utf-8", newline="") as f:
+        f.write(join_eol("\n".join(lines), eol, bom))
+    return True
+
+
+def clear_waiting(root: Path, ids: list, today: date) -> int:
+    path = root / STATE_DIR / WAITING_CLEARED
+    data = read_dict(path) or {}
+    cleared = [c for c in data.get("cleared") or [] if isinstance(c, dict)]
+    have = {str(c.get("id")) for c in cleared}
+    new = [str(i) for i in ids or [] if i and str(i) not in have]
+    cleared += [{"id": i, "on": today.isoformat()} for i in new]
+    save_json(path, {"cleared": cleared})
+    return len(new)
+
+
+def put_review(lines: list, review: list, note_name: str) -> list:
+    at = find_block(lines, EOD_BEGIN, EOD_END, note_name, "end-my-day")
+    if not at:
+        raise Stop(f"{note_name} has no End of day block: run end-my-day first. Nothing was written.")
+    head = next((i for i in range(at[0], at[1]) if lines[i].strip() == "## Review"), None)
+    if head is None:
+        return lines[:at[1]] + ["## Review", "", *review, ""] + lines[at[1]:]
+    return lines[:head + 1] + ["", *review, ""] + lines[at[1]:]
+
+
+def review_apply(root: Path, now: datetime = None, clock: datetime = None) -> dict:
+    """Apply the answers of the review skill (run/review-answers.json) to the day's note:
+    new tasks, due dates, done tasks, tags, Meeting map rows, decision lines, cleared
+    Waiting on me items. Then rewrite the Review with what is kept and a one line trace,
+    and remember what is done or erased so a re-run of end-my-day does not bring it back."""
+    now = now or datetime.now().astimezone()
+    clock = clock or datetime.now().astimezone()   # when the review happens
+    real_today = clock.date()
+    cfg = vault_config(root)
+    d = open_day(root, now)
+    if not d["exists"]:
+        raise Stop(f"There is no note for {d['day'].isoformat()}. Nothing was written.")
+    day, rel, tail_titles = d["day"].isoformat(), d["rel"], d["tail_titles"]
+    answers = read_list(root / STATE_DIR / "run" / "review-answers.json", "answers")
+    if answers is None:
+        raise Stop("review-answers.json is missing or not valid JSON in .daily-note/run/. Nothing was written.")
+    items = review_list(root, now)["items"]
+    by_id = {i["id"]: i for i in items}
+    lines = d["lines"]
+    count = {"tasks": 0, "dates": 0, "done": 0, "tags": 0, "map": 0, "decisions": 0,
+             "cleared": 0, "erased": 0, "kept": 0, "failed": 0}
+    settled, notes, failed = set(), [], []
+    for ans in answers:
+        iid = ans.get("id")
+        if iid not in by_id:
+            continue
+        outcome = ans.get("outcome")
+        ok = True
+        for a in ans.get("actions") or []:
+            if not isinstance(a, dict):
+                continue
+            act = a.get("do")
+            skip = managed(lines, rel)
+            if act == "task":
+                line = new_task(a, real_today)
+                if line:
+                    lines = insert_task(lines, line, a.get("heading"), rel, tail_titles)
+                    count["tasks"] += 1
+                    if a.get("note"):
+                        notes.append(line)
+                else:
+                    ok = False
+            elif act in ("due", "finish"):
+                i = find_task(lines, a.get("line"), skip)
+                when = str(a.get("date") or "")
+                if i is None or not OPEN_TASK.match(lines[i]):
+                    ok = False
+                elif act == "due" and DATE_VALUE.match(when) and "📅" not in lines[i]:
+                    lines[i] = with_field(lines[i], "📅 " + when)
+                    count["dates"] += 1
+                elif act == "finish":
+                    lines[i] = with_field(OPEN_TASK.sub(r"\1[x]", lines[i]), "✅ " + real_today.isoformat())
+                    count["done"] += 1
+                else:
+                    ok = False
+            elif act == "tag":
+                tag = str(a.get("pt") or "").lstrip("#")
+                before = list(lines)
+                lines, _ = add_tags(lines, [{"heading": a.get("heading"), "tag": tag}], set(), rel, tail_titles)
+                if lines != before:
+                    count["tags"] += 1
+                else:
+                    ok = False
+            elif act == "map":
+                if add_map_row(root, cfg, a):
+                    count["map"] += 1
+                else:
+                    ok = False
+            elif act == "decision":
+                before = list(lines)
+                lines, _ = add_decisions(lines, [a], rel, tail_titles)
+                if lines != before:
+                    count["decisions"] += 1
+            elif act == "clear":
+                count["cleared"] += clear_waiting(root, a.get("ids"), real_today)
+        if not ok:
+            count["failed"] += 1
+            failed.append(iid)
+            continue
+        if outcome in ("done", "erased"):
+            settled.add(iid)
+            if outcome == "erased":
+                count["erased"] += 1
+        elif outcome == "kept":
+            count["kept"] += 1
+
+    memory = review_memory(root)
+    keep_from = (real_today - timedelta(days=REVIEW_KEEP_DAYS)).isoformat()
+    memory = {k: v for k, v in memory.items() if k >= keep_from}
+    mine = memory.get(day, {})
+    labels = (("tasks", "task", "tasks"), ("dates", "date", "dates"), ("done", "done", "done"),
+              ("tags", "tag", "tags"), ("map", "map row", "map rows"),
+              ("decisions", "decision", "decisions"), ("cleared", "cleared", "cleared"),
+              ("erased", "erased", "erased"), ("kept", "kept", "kept"),
+              ("failed", "failed", "failed"))
+    words = [f"{count[k]} {one if count[k] == 1 else many}" for k, one, many in labels if count[k]]
+    when = clock.strftime("%H:%M") + ("" if d["day"] == real_today else f" on {short_date(real_today)}")
+    trace = f"- Review done {when}: " + (", ".join(words) or "nothing changed") + "."
+    mine = {"ids": sorted(set(mine.get("ids") or []) | settled), "trace": trace}
+    memory[day] = mine
+    left = [i for i in items if i["id"] not in settled]
+    lines = put_review(lines, review_lines(left, trace, True), rel)
+    written, backup = save(root, d, lines)
+    save_json(root / STATE_DIR / REVIEW_MEMORY, memory)
+    save_review_items(root, d["day"], left)
+    final = d["path"].read_text(encoding="utf-8").split("\n") if written else lines
+    note_lines = [i + 1 for i, l in enumerate(final) for t in notes if l.strip() == t]
+    return {"note": rel, "trace": trace, "left": len(left), "failed": failed,
+            "task_note_lines": note_lines, "backup": backup}
+
+
 # ---------------------------------------------------------------- meeting-recap
 
 def recap(root: Path, now: datetime = None) -> dict:
@@ -1625,7 +1936,7 @@ def meetings_seen(root: Path, cfg: dict, today: date, tail_titles: set) -> dict:
 def map_cmd(root: Path, now: datetime = None) -> dict:
     """Apply the meeting map to meetings.json, right after the meetings steps: a skip
     meeting leaves the list, a project one gets its tag and "kind": "project", a mixed one
-    gets "kind": "mixed". Writes review-map.md with the recurring meetings of today that
+    gets "kind": "mixed". Writes review-map.json with the recurring meetings of today that
     the map does not know and that are never tagged."""
     now = now or datetime.now().astimezone()
     cfg = vault_config(root)
@@ -1665,11 +1976,14 @@ def map_cmd(root: Path, now: datetime = None) -> dict:
         asked.add(key)
         how = ("never tagged" if e["untagged"] == e["days"]
                else f"untagged {e['untagged']} times")
-        ask.append(f'- **Map?** "{heading_text(m.get("heading") or m.get("title") or "")}" came '
-                   f"{e['days']} times in {HISTORY_DAYS // 7} weeks, {how}. Add it to the Meeting "
-                   f"map in {rel}: a project id, mixed or skip.")
-    with open(run / "review-map.md", "w", encoding="utf-8", newline="") as f:
-        f.write("".join(line + "\n" for line in ask))
+        title = heading_text(m.get("heading") or m.get("title") or "")
+        ask.append({"kind": "map", "key": title, "title": title, "days": e["days"],
+                    "tags": e["tags"],
+                    "text": f'- **Map?** "{title}" came {e["days"]} times in {HISTORY_DAYS // 7} '
+                            f"weeks, {how}. Add it to the Meeting map in {rel}: a project id, "
+                            f"mixed or skip."})
+    with open(run / "review-map.json", "w", encoding="utf-8", newline="") as f:
+        json.dump({"items": ask}, f, ensure_ascii=False, indent=1)
     out.update({"skipped": len(skipped), "project": sum(m.get("kind") == "project" for m in kept),
                 "mixed": sum(m.get("kind") == "mixed" for m in kept), "ask": len(ask)})
     return out
@@ -1786,8 +2100,9 @@ def channels_cmd(root: Path, now: datetime = None) -> dict:
 
 COMMANDS = {"today": today_cmd, "write": write, "prose": prose, "close": close, "recap": recap,
             "notes": notes_cmd, "map": map_cmd, "seen": seen_cmd, "channels": channels_cmd,
-            "back": back_cmd}
-DATED = ("today", "prose", "close", "notes", "map", "channels")   # take --date YYYY-MM-DD
+            "back": back_cmd, "review-list": review_list, "review-apply": review_apply}
+DATED = ("today", "prose", "close", "notes", "map", "channels",
+         "review-list", "review-apply")                            # take --date YYYY-MM-DD
 
 
 def parse_args(argv: list):
@@ -1817,7 +2132,7 @@ def main():
         command, now = parse_args(sys.argv[1:])
         out = (close(root, now, past=True) if command == "close" and now
                else COMMANDS[command](root, now))
-        if command in ("write", "close", "back"):
+        if command in ("write", "close", "back", "review-apply"):
             out["opened"], uri = open_note(root.name, out["note"])
             if not out["opened"]:
                 out["uri"] = uri

@@ -59,12 +59,22 @@ Write `decisions.json` in the Run folder. Made-up example:
 
 No decision: `{"decisions": []}`.
 
-Then write `review-decisions.md` in the Run folder, one bullet each, never a link:
+Then write `review-decisions.json` in the Run folder, one item per unsure thread:
 
-- each unsure thread: `- **Decision?** <what seems decided>, in <channel> with <who>. Add it yourself if it is one.`
-- each decision with a `key`: `- **Jira?** <key>: comment the decision, "Decided in Slack on <day>: <text>".`
+- `kind`: `maybe`, and `key`: the permalink
+- the decision's fields, renamed where an item already uses the name: `decision` (its text), `pt`, `ticket` (its Jira key), `link`, `heading`
+- `text`: the bullet, never with a link: `- **Decision?** <what seems decided>, in <channel> with <who>.`
 
-Nothing to flag: write the file empty. The `review-claude-md` step reads `decisions.json` too, for the project files.
+```json
+{"items": [
+  {"kind": "maybe", "key": "https://example-team.slack.com/archives/C0FAKE0001/p1790000000000002",
+   "decision": "Consent form v2 out of scope for the pilot", "pt": "PT-2402", "ticket": null,
+   "link": "https://example-team.slack.com/archives/C0FAKE0001/p1790000000000002", "heading": null,
+   "text": "- **Decision?** Consent form v2 out of scope for the pilot, in pt2402-consent with Marc."}
+]}
+```
+
+Nothing unsure: `{"items": []}`. Each sure decision gets its own Review item from the script, with the choice to add it to the project `CLAUDE.md` or comment it on Jira. The `review-claude-md` step reads `decisions.json` too, for the project files.
 
 ## If it fails
 
