@@ -6,7 +6,7 @@ Runs right after `meetings`. If `meetings.json` holds an `error`, skip this step
 
 ## Do
 
-1. Call the Gmail `search_threads` tool with `query`: `from:gemini-notes@google.com newer_than:2d` and `pageSize`: `50`.
+1. Call the Gmail `search_threads` tool with `query`: `from:gemini-notes@google.com after:<the day before date> before:<2 days after date>`, both as `YYYY/MM/DD`, and `pageSize`: `50`. The window is wide on purpose, since Gmail reads those dates in Pacific time: step 2 keeps the right day.
 2. Keep a message only when all of these are true. Skip every other one.
    - Its `sender` is exactly `gemini-notes@google.com`.
    - Its `subject` starts with `Notes:` and holds today's date the way Gemini writes it, from `date`: `Oct 13, 2026`.

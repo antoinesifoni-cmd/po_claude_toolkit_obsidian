@@ -25,6 +25,10 @@ Commands (run from the vault root, the folder that holds .obsidian/):
           for the recurring meetings it does not know
   seen    print the meeting headings of the last 3 weeks of daily notes, with how often
           each was tagged, to propose a first Meeting map. Writes nothing
+  back    I'm back: build "<date> - Back from OOO.md" from back.json, back-summary.md and
+          waiting.json. Stops when that note exists
+  --date YYYY-MM-DD  with today, prose, close, notes, map or channels: work on a past day,
+          seen from its last minute. close stops when that day has no note
   channels print the Slack channels to watch: each project's "Slack:" line, the general
           "## Slack channels" list of the daily notes folder's CLAUDE.md, and which
           projects are ongoing (tagged in the last 14 days). Writes nothing
@@ -217,6 +221,16 @@ def last_note_day(root: Path, folder: str, today: date) -> date:
     return d
 
 
+def workdays_between(first: date, last: date) -> int:
+    """Monday to Friday strictly between two days: the workdays with no note."""
+    return sum((first + timedelta(days=i)).weekday() < 5 for i in range(1, (last - first).days))
+
+
+def past_now(day: date) -> datetime:
+    """A past day seen from its last minute, so every meeting of it has ended."""
+    return datetime.combine(day, dtime(23, 59)).astimezone()
+
+
 def today_cmd(root: Path, now: datetime = None) -> dict:
     now = now or datetime.now().astimezone()
     cfg = vault_config(root)
@@ -233,8 +247,10 @@ def today_cmd(root: Path, now: datetime = None) -> dict:
     since = last_note_day(root, cfg["folder"], day)
     return {
         "date": day.isoformat(),
+        "past": day < datetime.now().astimezone().date(),
         "note": note_rel(cfg, day),
         "now": now.strftime("%H:%M"),
+        "workdays_missed": workdays_between(since, day),
         "day_start": local_midnight(day).isoformat(),
         "day_end": local_midnight(day + timedelta(days=1)).isoformat(),
         "mail_since": since.isoformat(),
@@ -401,7 +417,8 @@ def item_age(when, today: date):
         return None
 
 
-def read_waiting(root: Path, run: Path, today: date):
+def read_waiting(root: Path, run: Path, today: date, max_days: int = WAITING_MAX_DAYS,
+                 share_days: int = WAITING_SHARE_DAYS):
     """The open items of waiting.json, oldest first, as (age in days, item). None when the
     step left no usable file. Drops what is too old, in the future, a share past its day,
     or cleared in an earlier Review."""
@@ -411,9 +428,9 @@ def read_waiting(root: Path, run: Path, today: date):
     cleared, out = read_cleared(root), []
     for it in items:
         age = item_age(it.get("when"), today)
-        if age is None or age < 0 or age > WAITING_MAX_DAYS:
+        if age is None or age < 0 or age > max_days:
             continue
-        if it.get("kind") == "share" and age > WAITING_SHARE_DAYS:
+        if it.get("kind") == "share" and age > share_days:
             continue
         if str(it.get("id") or "") in cleared:
             continue
@@ -441,14 +458,14 @@ def waiting_line(age: int, it: dict) -> str:
     return "- " + " · ".join(parts)
 
 
-def waiting_lines(items) -> list:
+def waiting_lines(items, cap: int = WAITING_CAP) -> list:
     if items is None:
         return [NO_ALERTS]
     if not items:
         return [NO_WAITING]
-    out = [waiting_line(age, it) for age, it in items[:WAITING_CAP]]
-    if len(items) > WAITING_CAP:
-        out.append(f"- +{len(items) - WAITING_CAP} more, newer ones. The run report lists them.")
+    out = [waiting_line(age, it) for age, it in items[:cap]]
+    if len(items) > cap:
+        out.append(f"- +{len(items) - cap} more, newer ones. The run report lists them.")
     return out
 
 
@@ -470,15 +487,16 @@ def put_waiting(lines: list, items, note_name: str):
 
 # ---------------------------------------------------------------- building the note
 
-def build_block(run: Path, waiting=None) -> list:
+def build_block(run: Path, waiting=None, own_alerts=None) -> list:
     summary = []
     if (run / "summary.md").exists():
         summary = summary_lines(read_text(run / "summary.md"))
     alerts = []
     for f in sorted(run.glob("alert-*.md")):
         alerts += alert_lines(read_text(f))
+    alerts = list(own_alerts or []) + (alerts or [NO_ALERTS])
     return [BEGIN, "", "# Summary", "", *(summary or [NO_SUMMARY]), "",
-            "## Alert", "", *(alerts or [NO_ALERTS]), "",
+            "## Alert", "", *alerts, "",
             WAITING_HEADING, "", *waiting_lines(waiting), "", END]
 
 
@@ -546,12 +564,46 @@ def backup_path(root: Path, day: date, now: datetime) -> Path:
     return path
 
 
+BACK_AFTER = 3                   # workdays with no note before "I'm back" is offered
+MONTHS = "Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec".split()
+
+
+def short_date(d: date) -> str:
+    return f"{MONTHS[d.month - 1]} {d.day}"
+
+
+def day_alerts(root: Path, day: date) -> list:
+    """The script's own Alert lines: the last note was never closed, and a long gap since
+    it, which is when "I'm back" helps."""
+    cfg = vault_config(root)
+    last = last_note_day(root, cfg["folder"], day)
+    path = root / note_rel(cfg, last)
+    if not path.exists():
+        found = [p for d, p in note_days(root, cfg["folder"], last, last)]
+        path = found[0] if found else None
+    out = []
+    if path is not None and path.exists():
+        try:
+            closed = EOD_BEGIN in read_text(path)
+        except (OSError, UnicodeDecodeError):
+            closed = True
+        if not closed:
+            out.append(f"- **Not closed** The note of {short_date(last)} has no End of day. "
+                       f"Run /daily-note:end-my-day {last.isoformat()} to close it.")
+        gap = workdays_between(last, day)
+        if gap >= BACK_AFTER:
+            out.append(f"- **Back from time off?** Your last note is from {short_date(last)}, "
+                       f"{gap} workdays ago. Say \"I'm back\" for a catch-up note.")
+    return out
+
+
 def write(root: Path, now: datetime = None) -> dict:
     """Apply the run folder to today's note. Never opens anything, so tests can call it."""
     d = open_day(root, now)
     run = root / STATE_DIR / "run"
     waiting = read_waiting(root, run, d["day"])
-    lines, block_state = put_block(d["lines"], build_block(run, waiting), d["rel"])
+    own = day_alerts(root, d["day"])
+    lines, block_state = put_block(d["lines"], build_block(run, waiting, own), d["rel"])
     lines, headings = add_headings(lines, read_meetings(run), d["tail_titles"])
     result = {"note": d["rel"], "created": not d["exists"], "block": block_state,
               "headings": headings, "waiting": "not checked" if waiting is None else len(waiting),
@@ -1039,9 +1091,12 @@ def prose(root: Path, now: datetime = None) -> dict:
     return {"note": rel, "lines": len(own)}
 
 
-def close(root: Path, now: datetime = None) -> dict:
+def close(root: Path, now: datetime = None, past: bool = False) -> dict:
     """Apply the run folder to today's note. Never opens anything either."""
     d = open_day(root, now)
+    if past and not d["exists"]:
+        raise Stop(f"There is no note for {d['day'].isoformat()} ({d['rel']}). A past day is "
+                   f"closed only when it has a note. Nothing was written.")
     run = root / STATE_DIR / "run"
     rel, tail_titles = d["rel"], d["tail_titles"]
     meetings = read_meetings(run)
@@ -1290,6 +1345,128 @@ def add_decisions(lines: list, decisions, note_name: str, tail_titles: set):
     if refused:
         out.append(f"{refused} refused")
     return lines, ", ".join(out)
+
+
+# ---------------------------------------------------------------- I'm back
+
+BACK_NAME = "{date} - Back from OOO.md"
+BACK_WAITING_CAP = 30
+
+
+def read_dict(path: Path):
+    try:
+        data = json.loads(read_text(path))
+    except (OSError, ValueError):
+        return None
+    return data if isinstance(data, dict) else None
+
+
+def vault_link(root: Path, rel) -> str:
+    """[[path|name]] for a note that exists in the vault, else ""."""
+    rel = str(rel or "").strip().replace("\\", "/")
+    if (not rel.endswith(".md") or NOT_IN_LINK.search(rel) or ".." in rel.split("/")
+            or rel.startswith("/") or not (root / rel).is_file()):
+        return ""
+    return f"[[{rel[:-3]}|{rel.rsplit('/', 1)[-1][:-3]}]]"
+
+
+def back_group(root: Path, g: dict, title: str) -> list:
+    out = ["", f"# {title}"]
+    pt = str(g.get("pt") or "")
+    if PROJECT_ID.match(pt):
+        out.append("#" + pt)
+    meetings = []
+    for m in g.get("meetings") or []:
+        try:
+            when = short_date(date.fromisoformat(str(m.get("date"))[:10]))
+        except ValueError:
+            continue
+        line = f"- **{when}** {inline(m.get('heading'), 80) or 'Meeting'}"
+        recap = inline(m.get("recap"), 300)
+        if recap:
+            line += f": {recap}"
+        if DOC_ID.match(str(m.get("doc") or "")):
+            line += f" [Transcript]({doc_url(m['doc'], m.get('tab'))})"
+        meetings.append(line)
+    decisions = [decision_line(dict(d, pt=None)) for d in g.get("decisions") or []]
+    jira = []
+    for j in g.get("jira") or []:
+        key = str(j.get("key") or "")
+        text = inline(j.get("text"), 160)
+        if TICKET.match(key) and text:
+            jira.append(f"- {key} {text}")
+    confluence = []
+    for c in g.get("confluence") or []:
+        text = inline(c.get("text"), 160)
+        link = vault_link(root, c.get("path"))
+        if text or link:
+            confluence.append("- " + " ".join(x for x in (link, text) if x))
+    for heading, items in (("Meetings you missed", meetings), ("Decisions", [d for d in decisions if d]),
+                           ("Jira", jira), ("Confluence", confluence)):
+        if items:
+            out += ["", f"## {heading}", *items]
+    return out if len(out) > 3 else []
+
+
+def back_cmd(root: Path, now: datetime = None) -> dict:
+    """Build the catch-up note after time off, from back.json, back-summary.md and
+    waiting.json in the run folder. Never writes over a note: a second run stops."""
+    now = now or datetime.now().astimezone()
+    cfg = vault_config(root)
+    day = now.date()
+    run = root / STATE_DIR / "run"
+    data = read_dict(run / "back.json")
+    if data is None:
+        raise Stop("back.json is missing or not valid JSON in .daily-note/run/. Nothing was written.")
+    try:
+        first = date.fromisoformat(str(data.get("from")))
+        last = date.fromisoformat(str(data.get("to")))
+    except ValueError:
+        raise Stop("back.json needs \"from\" and \"to\" as YYYY-MM-DD. Nothing was written.")
+    if not first <= last < day:
+        raise Stop(f"The range {first} to {last} must end before {day}. Nothing was written.")
+    name = BACK_NAME.format(date=day.isoformat())
+    rel = f"{cfg['folder']}/{name}" if cfg["folder"] else name
+    if (root / rel).exists():
+        raise Stop(f"{rel} already exists. Rename or delete it to build it again. Nothing was written.")
+
+    summary = []
+    if (run / "back-summary.md").exists():
+        summary = summary_lines(read_text(run / "back-summary.md"))
+    # Over time off, a share is as new as anything else: it shows for the whole range.
+    span = (day - first).days
+    waiting = read_waiting(root, run, day, max_days=span, share_days=span)
+    lines = ["---", "tags:", "  - daily-note", "  - back-from-ooo",
+             f"from: {first.isoformat()}", f"to: {last.isoformat()}", "---",
+             f"Away {short_date(first)} to {short_date(last)}.", "",
+             "# Summary", "", *(summary or [NO_SUMMARY]), "",
+             "# Waiting on me", "", *waiting_lines(waiting, BACK_WAITING_CAP)]
+    groups = 0
+    for g in data.get("projects") or []:
+        if not isinstance(g, dict):
+            continue
+        pt = str(g.get("pt") or "")
+        if not PROJECT_ID.match(pt):
+            continue
+        part = back_group(root, g, " ".join(x for x in (pt, inline(g.get("name"), 60)) if x))
+        if part:
+            lines += part
+            groups += 1
+    other = data.get("other")
+    if isinstance(other, dict):
+        part = back_group(root, dict(other, pt=None), "Other")
+        if part:
+            lines += part
+            groups += 1
+    lines += ["", "# Your tasks", "", "Still open, due while you were away. Reschedule, close or drop each one.",
+              "", "```tasks", "not done", f"due after {(first - timedelta(days=1)).isoformat()}",
+              f"due before {day.isoformat()}", "sort by due", "```", ""]
+    path = root / rel
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "w", encoding="utf-8", newline="") as f:
+        f.write("\n".join(lines))
+    return {"note": rel, "from": first.isoformat(), "to": last.isoformat(), "groups": groups,
+            "waiting": "not checked" if waiting is None else len(waiting)}
 
 
 # ---------------------------------------------------------------- meeting-recap
@@ -1608,17 +1785,39 @@ def channels_cmd(root: Path, now: datetime = None) -> dict:
 
 
 COMMANDS = {"today": today_cmd, "write": write, "prose": prose, "close": close, "recap": recap,
-            "notes": notes_cmd, "map": map_cmd, "seen": seen_cmd, "channels": channels_cmd}
+            "notes": notes_cmd, "map": map_cmd, "seen": seen_cmd, "channels": channels_cmd,
+            "back": back_cmd}
+DATED = ("today", "prose", "close", "notes", "map", "channels")   # take --date YYYY-MM-DD
+
+
+def parse_args(argv: list):
+    """(command, now): --date moves a dated command to the last minute of a past day."""
+    usage = (f"usage: daynote.py {'|'.join(COMMANDS)} [--date YYYY-MM-DD]   (run it from the "
+             f"vault root. --date works with {', '.join(DATED)})")
+    if len(argv) not in (1, 3) or argv[0] not in COMMANDS:
+        raise Stop(usage)
+    if len(argv) == 1:
+        return argv[0], None
+    if argv[1] != "--date" or argv[0] not in DATED:
+        raise Stop(usage)
+    try:
+        day = date.fromisoformat(argv[2])
+    except ValueError:
+        raise Stop(f"--date wants YYYY-MM-DD, not {argv[2]!r}.")
+    today = datetime.now().astimezone().date()
+    if day > today:
+        raise Stop(f"{day} is in the future. Only today or a past day can be closed.")
+    return argv[0], (None if day == today else past_now(day))
 
 
 def main():
     sys.stdout.reconfigure(encoding="utf-8")
-    if len(sys.argv) != 2 or sys.argv[1] not in COMMANDS:
-        sys.exit(f"usage: daynote.py {'|'.join(COMMANDS)}   (run it from the vault root)")
     root = Path.cwd()
     try:
-        out = COMMANDS[sys.argv[1]](root)
-        if sys.argv[1] in ("write", "close"):
+        command, now = parse_args(sys.argv[1:])
+        out = (close(root, now, past=True) if command == "close" and now
+               else COMMANDS[command](root, now))
+        if command in ("write", "close", "back"):
             out["opened"], uri = open_note(root.name, out["note"])
             if not out["opened"]:
                 out["uri"] = uri

@@ -6,7 +6,7 @@ Every call is read-only. Never send, reply, react, comment, label or mark as rea
 
 ## Window
 
-`since` is 5 days before `date` (from `today`), as `YYYY-MM-DD`. Nothing older than `since` goes in the list.
+`since` is 5 days before `date` (from `today`), as `YYYY-MM-DD`. Nothing older than `since` goes in the list. Slack's `after:` leaves out the day it names, so Slack filters use `after:<the day before since>`. Gmail's `after:` keeps it.
 
 ## Sources
 
@@ -14,20 +14,20 @@ Every call is read-only. Never send, reply, react, comment, label or mark as rea
 
 1. Call the Slack `slack_search_public_and_private` tool with:
    - `keywords`: `["<@ME>"]`, where `ME` is the logged-in user's id that the tool's description gives
-   - `filters`: `after:<since>`
+   - `filters`: `after:<the day before since>`
    - `channel_types`: `"public_channel,private_channel,mpim"`. Never `im`: 1:1 DMs are left out on purpose.
    - `sort`: `"timestamp"`, `limit`: `20`, `include_context`: `false`, `response_format`: `"detailed"`, `natural_language_query`: `""`
 
-   If it gives a cursor, call it once more with that `cursor`. 40 mentions at most.
+   If it gives a cursor, call it once more with that `cursor`. 40 mentions at most. When `since` is more than 5 days back (the I'm back run), search one week at a time with `after:` and `before:`, and follow each cursor 4 times at most, so the first days are not cut.
 2. Drop a mention when:
    - it is from Antoine himself, or from a bot
    - it asks nothing of him: thanks, kudos, a pure "for your visibility" or FYI, a cc on something that is not his to answer. When unsure, keep it.
 3. For each mention left, check whether he answered it. The thread parent is the `thread_ts` in its permalink, or its own `Message_ts` when there is none.
    - Call `slack_read_thread` with the channel id, the parent ts, `oldest`: the mention's ts and `limit`: `50`. A reply from `ME` after the mention means answered.
    - When the mention is not in a thread and has no replies, call `slack_read_channel` with the channel id, `oldest`: the mention's ts and `limit`: `15` instead. A message from `ME` after it means answered.
-   - Also answered: other people in the thread already settled what was asked, like a question someone else answered, or a status that needed nothing from him.
+   - Also answered: other people already settled what was asked, in the thread or elsewhere you saw it (a Jira comment, for example), like a question someone else answered, or a status that needed nothing from him.
    - `oldest` leaves out the mention itself, so "No thread messages" means nobody wrote after it.
-   - A reaction from Antoine counts as an answer: one `slack_search_public_and_private` call per emoji, `filters`: `hasmy::<emoji>: after:<since>`, `channel_types`: `"public_channel,private_channel,mpim"`, `natural_language_query`: `""`, for each of `+1`, `white_check_mark`, `heavy_check_mark`, `ok_hand`, `100`. Several `hasmy:` filters in one call must all match, so never combine them. A mention found there is answered. Run these 5 searches before the thread reads, and skip the reads for what they settle.
+   - A reaction from Antoine counts as an answer: one `slack_search_public_and_private` call per emoji, `filters`: `hasmy::<emoji>: after:<the day before since>`, `channel_types`: `"public_channel,private_channel,mpim"`, `response_format`: `"detailed"`, `include_context`: `false`, `natural_language_query`: `""`, for each of `+1`, `white_check_mark`, `heavy_check_mark`, `ok_hand`, `100`. Several `hasmy:` filters in one call must all match, so never combine them. A mention found there is answered. Run these 5 searches before the thread reads, and skip the reads for what they settle.
 4. Each one not answered is an item:
    - `source`: `Slack`, or `Slack group` in a group DM
    - `where`: the channel name without `#`, or the group DM's other participants' first names
@@ -60,7 +60,8 @@ Every call is read-only. Never send, reply, react, comment, label or mark as rea
 - `who`: the person's display name.
 - `when`: when it was sent, local time, `YYYY-MM-DDTHH:MM`.
 - `pt`: the project, when one is clear: the project whose `Slack:` line lists the channel or group DM (run the Script with `channels` once, its `projects` list has them), a project id in the channel name (`pt1760`, `pt-1760`), the page title or the message; or a ticket key that one project's `CLAUDE.md` lists (Grep the key in `Confluence Projects/*/CLAUDE.md` with `output_mode: "files_with_matches"`). Else `null`.
-- **Same ask twice:** a Slack message and a Jira mention about the same ticket from the same person are one item: keep the newest, and put both links in `links`.
+- **Same ask twice:** a Slack message and a Jira mention about the same ticket from the same person are one item: keep the newest, and put both links in `links`. Several mentions in one Slack thread are one item too: the newest one, with what they need now.
+- **Shares:** `where` is left out, `what` names the file.
 - **Cleared:** read `.daily-note/waiting-cleared.json` if it exists, and drop every item whose `id` is in its `cleared` list.
 
 ## Rules
