@@ -31,6 +31,7 @@ allowed-tools: Edit(.daily-note/run/**)
 
 - Asking is the permission to create the note and to change the task line, as the vault rule on new notes wants. In batch, his yes to the list is the permission.
 - Only the Task note script changes notes. Never use Edit or Write on a note. Write only inside the Run folder.
+- Write a Run folder file with the Write tool, never through Bash (`cat >`, `echo >`, a heredoc). Write is allowed there without asking, while a shell command asks every time, and warns about the email address that Gmail links carry.
 
 ## Final report
 
