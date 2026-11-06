@@ -42,6 +42,8 @@ Claude runs these for you. Listed so you can see what the plugin can actually do
 | `find <title> [--space K]` | search Confluence by title, to get an id without leaving the editor |
 | `link <path> <url-or-id>` | map a note **or** folder to an existing page/folder, then pull it |
 | `link-folder <path> <url-or-id>` | alias for `link`, forced to folder |
+| `relink <old> <new>` | a linked note or folder was renamed or moved in the vault: move its link, keeping its sync state. Never renames the page |
+| `unlink <path>` | forget a note's or folder's link, after it was deleted. The Confluence page is not touched |
 | `create-page <file> --parent <id> [--draft]` | create a **new** page from a note, and link it. `--draft` keeps it unpublished until you publish it in Confluence |
 | `create-folder <dir> --parent <id>` | create a **new** folder plus the local directory |
 | `scaffold <spec.yaml>` | create a whole nested tree in one pass |
@@ -55,6 +57,11 @@ Claude runs these for you. Listed so you can see what the plugin can actually do
   it, because a just-linked note is usually empty or stale and its first push would
   otherwise publish over the real page (`--no-pull` opts out).
 - **`find` by title.** Getting a page id no longer means going to Confluence to copy a URL.
+- **Renames in the vault don't lose the link.** A renamed or moved note is found again by
+  the `page_id` in its properties. `status` reports `RENAMED?`, `MISSING`, `AMBIGUOUS`
+  (and the same for folders) instead of a ghost "push needed". Say "fix my Confluence
+  links" and Claude asks about each one, then runs `relink` or `unlink`, after a backup in
+  `.confsync/backups/`. Pull no longer recreates a renamed note at its old path.
 - **Creation, not just sync.** `create-page` / `create-folder` / `scaffold` make new
   Confluence content. `scaffold` builds a whole tree from one YAML spec, mirrors it into
   the vault, and links every node. Idempotent, so a run that dies halfway is fixed by

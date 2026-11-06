@@ -2,13 +2,18 @@
 
 Neither writes to Confluence. status reads page versions to compare them; rebaseline
 touches mapping.json only and never contacts the site at all.
+
+status also reports linked notes and folders that were renamed, moved or deleted in the
+vault (see reconcile.py). It only reports them: relink/unlink in link.py act on them.
 """
 
 from pathlib import Path
 
 from .. import drafts
-from ..config import MAPPING_FILE, VAULT, api, get_config, load_json, rel, save_json
+from ..config import (FOLDERS_FILE, MAPPING_FILE, VAULT, api, get_config, load_json, rel,
+                      save_json)
 from ..hashing import HASH_ALGO, is_legacy, local_body_hash
+from ..reconcile import find_issues, report_lines
 from ..rest import get_draft, get_page_body, get_page_meta
 
 
@@ -22,11 +27,25 @@ def cmd_status(args):
     if not targets:
         print("No files linked yet. Use: conf.py link <file> <pageId>")
         return
+
+    # Renamed, moved or deleted in the vault: reported once, up front, instead of as a
+    # note with "local changes" that no longer exists.
+    issues = find_issues(mapping, load_json(FOLDERS_FILE, {}))
+    found = report_lines(issues)
+    if args.file:
+        found = [line for line in found if targets[0] in line]
+    for line in found:
+        print(line)
+    lost = issues.lost()
+
     legacy_seen = False
     for f in targets:
+        if f in lost:
+            continue
         entry = mapping.get(f)
         if not entry:
-            print(f"{f}: not linked")
+            if not found:
+                print(f"{f}: not linked")
             continue
         local = VAULT / f
         local_changed = not local.exists() or local_body_hash(local) != entry["hash"]

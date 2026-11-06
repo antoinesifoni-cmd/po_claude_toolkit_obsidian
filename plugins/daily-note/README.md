@@ -19,8 +19,9 @@ since asking is the whole point.
 
 - **Summary:** 3 to 5 short bullets on how the day looks, built from your meetings, tasks due or
   overdue, the Gmail Jira labels, your open Jira issues and each project's `CLAUDE.md`.
-- **Alert:** the linked Confluence pages that someone changed on Confluence, from
-  `confluence-sync`.
+- **Alert:** the linked Confluence pages that someone changed on Confluence, and the
+  links that lost their note after a rename, move or delete in the vault (**Link lost**),
+  from `confluence-sync`.
 - **Meetings:** one H1 per meeting from Google Calendar, with its time and `#PT-xxxx` tag.
   Added only while the note has no heading of your own yet, so a re-run never duplicates
   them and never touches what you wrote.

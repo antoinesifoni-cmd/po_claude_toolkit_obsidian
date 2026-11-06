@@ -53,6 +53,23 @@ Each line is `<file>: v<local> local | v<remote> remote -> <state>`.
 | `new page, still a draft in Confluence (never published)` | made with `create-page --draft`, not published yet | publish it from the Confluence editor; more edits go up with `push --draft` |
 | `... [draft sent <when>, note edited since]` | the note changed after its draft push | as the state before the brackets says |
 
+## Notes renamed, moved or deleted in the vault
+
+Before the per-note lines, status may print lines about links that lost their note.
+Every linked note carries its `page_id` in its properties, which is how a renamed one is
+found again. These lines only report: nothing has been changed.
+
+| Line | Meaning |
+|---|---|
+| `RENAMED? <old> -> <new> (page N)` | the note was renamed or moved, and the link still points at the old name |
+| `FOLDER RENAMED? <old> -> <new> (folder N)` | a linked folder was renamed or moved, and the notes inside it too |
+| `MISSING: <old> (page N)` | the note is gone from the vault: deleted, or moved out of it |
+| `FOLDER MISSING: <old> (folder N)` | the same, for a folder |
+| `AMBIGUOUS: <old> ... in 2 notes: A, B` | the note is gone and two notes carry its page id (a copy was made) |
+
+For any of them, hand off to the confluence-link skill ("Fix links after a rename"). It asks
+the user about each one. Never run `relink` or `unlink` from here.
+
 A `CONFLICT` line is a *prediction*, not damage. Nothing has happened yet - it is telling
 you that a plain pull would have to choose. That is exactly the moment to read
 `${CLAUDE_PLUGIN_ROOT}/references/conflicts.md` and follow the merge flow, before either
