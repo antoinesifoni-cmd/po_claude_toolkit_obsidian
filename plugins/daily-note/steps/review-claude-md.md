@@ -4,8 +4,8 @@
 
 ## Sources
 
-1. **Today:** the note (Read `note` from the vault root) and `recaps.json` in the Run folder.
-2. **Today's projects:** every project tag in the note, the entries of `tags.json`, and each recap's `pt`. At most 5, the ones with the most material today first.
+1. **Today:** the note (Read `note` from the vault root), and `recaps.json` and `decisions.json` in the Run folder. A Slack decision about a project is a fact of today like any other.
+2. **Today's projects:** every project tag in the note, the entries of `tags.json`, each recap's `pt` and each decision's `pt`. At most 5, the ones with the most material today first.
 3. **Each project file:** Glob `Confluence Projects/<id> - */CLAUDE.md`. Grep `^## ` in it, with line numbers. Read only, with offset and limit, the sections on its state and its open questions (headings like `## State`, `## Status`, `## Open questions`, `## Undecided`), plus `## One-liner` or `## What this project is`.
 4. **The vault file:** in the vault `CLAUDE.md`, only the `## Project tags` section.
 

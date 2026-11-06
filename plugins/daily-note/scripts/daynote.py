@@ -25,6 +25,9 @@ Commands (run from the vault root, the folder that holds .obsidian/):
           for the recurring meetings it does not know
   seen    print the meeting headings of the last 3 weeks of daily notes, with how often
           each was tagged, to propose a first Meeting map. Writes nothing
+  channels print the Slack channels to watch: each project's "Slack:" line, the general
+          "## Slack channels" list of the daily notes folder's CLAUDE.md, and which
+          projects are ongoing (tagged in the last 14 days). Writes nothing
 
 Why a script does every write: the vault has no git and no undo. Keeping the one piece of
 code that can damage a note small, in one place, and covered by tests is the safety net.
@@ -43,6 +46,7 @@ What close() and recap() own in the note:
     section for, a "#PT-xxxx" tag, the "**Recap:**" and "**Transcript:**" lines,
     and one section per note created or edited today, with its "*created 09:01*" line
     and its "**Note:**" link
+  - the "⚖️ **Decided (Slack):**" lines, at the end of their section or in "# Decisions"
   - text corrections, applied only to lines the user wrote, and only when every link,
     tag, date, time, emoji and list marker in the line stays exactly as it was
 Everything else in the note is left byte for byte.
@@ -1050,13 +1054,15 @@ def close(root: Path, now: datetime = None) -> dict:
     lines, recaps = add_recaps(lines, read_list(run / "recaps.json", "recaps"), reserved, rel, tail_titles)
     lines, notes = add_notes(root, lines, read_list(run / "notes.json", "notes"),
                              read_list(run / "note-recaps.json", "notes"), rel, tail_titles)
+    lines, decisions = add_decisions(lines, read_list(run / "decisions.json", "decisions"),
+                                     rel, tail_titles)
     waiting = read_waiting(root, run, d["day"])
     lines, waiting_state = put_waiting(lines, waiting, rel)
     lines, block_state = put_eod_block(lines, build_eod_block(run, waiting), rel, tail_titles)
 
     result = {"note": rel, "created": not d["exists"], "corrections": fixes,
               "meetings": added, "tags": tags, "recaps": recaps, "notes": notes,
-              "waiting": waiting_state, "block": block_state,
+              "decisions": decisions, "waiting": waiting_state, "block": block_state,
               "backup": None}
     written, result["backup"] = save(root, d, lines)
     if not written:
@@ -1208,6 +1214,79 @@ def add_notes(root: Path, lines: list, notes, recaps, note_name: str, tail_title
     out = [f"added {added}"]
     if linked:
         out.append(f"{linked} already linked")
+    if refused:
+        out.append(f"{refused} refused")
+    return lines, ", ".join(out)
+
+
+# ---------------------------------------------------------------- Slack decisions
+
+DECIDED = "⚖️ **Decided (Slack):**"
+TICKET = re.compile(r"^[A-Z][A-Z0-9]+-\d+$")
+SLACK_LINK = WAITING_LINKS[0][1]
+
+
+def decision_line(d: dict) -> str:
+    text = inline(d.get("text"), 160)
+    if not text:
+        return ""
+    parts = [DECIDED, text]
+    pt, key = str(d.get("pt") or ""), str(d.get("key") or "")
+    if PROJECT_ID.match(pt):
+        parts.append("#" + pt)
+    if TICKET.match(key):
+        parts.append(key)
+    link = str(d.get("link") or "").strip()
+    if SLACK_LINK.match(link):
+        parts.append(f"[thread]({link})")
+    return "- " + " ".join(parts)
+
+
+def section_end(lines: list, s: dict) -> int:
+    """Right after the last line with text in a section."""
+    j = s["stop"]
+    while j > s["at"] + 1 and not lines[j - 1].strip():
+        j -= 1
+    return j
+
+
+def add_decisions(lines: list, decisions, note_name: str, tail_titles: set):
+    """Each decision at the end of the section it names, else in a "# Decisions" section
+    after the others. One whose thread or line is already in the note is left out, so a
+    re-run adds nothing."""
+    if decisions is None:
+        return lines, "not run"
+    added = known = refused = 0
+    for d in decisions:
+        line = decision_line(d)
+        if not line:
+            refused += 1
+            continue
+        text = "\n".join(lines)
+        link = str(d.get("link") or "").strip()
+        if (SLACK_LINK.match(link) and link in text) or line in text:
+            known += 1
+            continue
+        secs = layout(lines, note_name, tail_titles)[2]
+        key = title_key(d.get("heading"))
+        k = next((i for i, s in enumerate(secs) if key and title_key(s["title"]) == key), None)
+        if k is None:
+            k = next((i for i, s in enumerate(secs) if title_key(s["title"]) == "decisions"), None)
+        if k is None:
+            lines = insert_section(lines, {"start": None}, note_name, tail_titles,
+                                   ["# Decisions", line])
+        else:
+            at = section_end(lines, secs[k])
+            above = lines[at - 1]
+            # A list right under a paragraph line needs a blank line, or it joins it.
+            gap = at - 1 > secs[k]["at"] and not (
+                above.lstrip().startswith(("- ", "* ")) or time_range(above)
+                or TAG.sub("", above).strip() == "" or note_time(above))
+            lines = lines[:at] + ([""] if gap else []) + [line] + lines[at:]
+        added += 1
+    out = [f"added {added}"]
+    if known:
+        out.append(f"{known} already in the note")
     if refused:
         out.append(f"{refused} refused")
     return lines, ", ".join(out)
@@ -1433,8 +1512,103 @@ def seen_cmd(root: Path, now: datetime = None) -> dict:
     return {"map": map_rel(cfg), "days": HISTORY_DAYS, "meetings": meetings}
 
 
+# ---------------------------------------------------------------- Slack channels
+
+SLACK_LINE = re.compile(r"^\s*slack\s*:\s*(.+)$", re.I)
+SLACK_HEADING = re.compile(r"^##\s+slack channels\s*$", re.I)
+SLACK_NAME = re.compile(r"^#?([a-z0-9][a-z0-9._-]{0,79})$")
+SLACK_ID = re.compile(r"^([CDG][A-Z0-9]{6,})(?:\s*\((.{1,60})\))?$")
+PROJECTS_DIR = "Confluence Projects"
+ONGOING_DAYS = 14                              # tagged this recently: the project is ongoing
+
+
+def slack_entries(text: str) -> list:
+    """"#pt1760-alerts, C0BGDLJ7EUB (PCA group)" as entries: a channel name, or an id with
+    an optional label, which is how a group DM is named."""
+    out = []
+    for part in re.split(r",(?![^()]*\))", text):   # a comma inside a label does not split
+        part = part.strip().strip("`").strip()
+        m = SLACK_ID.match(part)
+        if m:
+            out.append({"id": m.group(1), "name": None, "label": (m.group(2) or "").strip() or None})
+            continue
+        m = SLACK_NAME.match(part.lower())
+        if m:
+            out.append({"id": None, "name": m.group(1), "label": None})
+    return out
+
+
+def general_channels(root: Path, cfg: dict) -> list:
+    """The "## Slack channels" section of the daily notes folder's CLAUDE.md: one entry per
+    bullet, or per comma-separated item on a bullet."""
+    path = root / map_rel(cfg)
+    if not path.exists():
+        return []
+    out, inside, in_code = [], False, False
+    for line in split_eol(read_text(path))[0].split("\n"):
+        if FENCE.match(line):
+            in_code = not in_code
+            continue
+        if in_code:
+            continue
+        if SLACK_HEADING.match(line.strip()):
+            inside = True
+            continue
+        if inside and HEADING.match(line):
+            break
+        if inside and line.lstrip().startswith(("- ", "* ")):
+            out += slack_entries(line.lstrip()[2:].split(" · ")[0])
+    return out
+
+
+def tagged_days(root: Path, cfg: dict, today: date) -> dict:
+    """{project id: last day it was tagged} over the daily notes of the last ONGOING_DAYS."""
+    last = {}
+    for d, p in note_days(root, cfg["folder"], today - timedelta(days=ONGOING_DAYS), today):
+        try:
+            text = read_text(p)
+        except (OSError, UnicodeDecodeError):
+            continue
+        for t in set(PROJECT_TAG.findall(text)):
+            t = t.lstrip("#")
+            last[t] = max(last.get(t, d), d)
+    return last
+
+
+def channels_cmd(root: Path, now: datetime = None) -> dict:
+    """The Slack channels to watch: each project's "Slack:" line in its CLAUDE.md, the
+    general list in the daily notes folder's CLAUDE.md, and which projects are ongoing.
+    Writes nothing."""
+    now = now or datetime.now().astimezone()
+    cfg = vault_config(root)
+    last = tagged_days(root, cfg, now.date())
+    projects = []
+    for f in sorted((root / PROJECTS_DIR).glob("*/CLAUDE.md")):
+        m = re.match(r"^([A-Z]{2,}-\d+)\b", f.parent.name)
+        if not m:
+            continue
+        channels = []
+        try:
+            for line in split_eol(read_text(f))[0].split("\n"):
+                hit = SLACK_LINE.match(line)
+                if hit:
+                    channels += slack_entries(hit.group(1))
+        except (OSError, UnicodeDecodeError):
+            continue
+        seen = last.get(m.group(1))
+        projects.append({"pt": m.group(1), "folder": f.parent.relative_to(root).as_posix(),
+                         "ongoing": seen is not None,
+                         "last_tagged": seen.isoformat() if seen else None,
+                         "channels": channels})
+    general = general_channels(root, cfg)
+    track = [dict(c, pt=p["pt"]) for p in projects if p["ongoing"] for c in p["channels"]]
+    track += [dict(c, pt=None) for c in general]
+    return {"date": now.date().isoformat(), "ongoing_days": ONGOING_DAYS,
+            "projects": projects, "general": general, "track": track}
+
+
 COMMANDS = {"today": today_cmd, "write": write, "prose": prose, "close": close, "recap": recap,
-            "notes": notes_cmd, "map": map_cmd, "seen": seen_cmd}
+            "notes": notes_cmd, "map": map_cmd, "seen": seen_cmd, "channels": channels_cmd}
 
 
 def main():

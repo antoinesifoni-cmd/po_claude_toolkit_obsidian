@@ -4,7 +4,7 @@
 
 ## Sources
 
-1. **The note:** Read `note` (from `today`) from the vault root. A section is an H1 and what is under it, outside the two skill blocks and above `# Task`.
+1. **The note:** Read `note` (from `today`) from the vault root. A section is an H1 and what is under it, outside the two skill blocks and above `# Task`. A `# Decisions` section is never tagged: each of its lines carries its own tag.
 2. **Meetings:** `meetings.json` and `recaps.json` in the Run folder. A meeting the note has no section for yet counts too, since `close` adds it.
 3. **Open projects:** Glob `Confluence Projects/*/CLAUDE.md`. Each folder name is `<id> - <name>`, like `PT-2311 - Scheduling`.
 4. **Other names:** in the vault `CLAUDE.md`, Grep `^## ` with line numbers, then Read only the `## Project tags` section. It gives each project's other names and Jira keys.
