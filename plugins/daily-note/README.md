@@ -1,8 +1,8 @@
 # daily-note
 
-A morning and an evening routine for an Obsidian vault, driven by Claude Code, plus three
-skills on request: one recaps a single meeting, one gives a task a note to write in, one
-builds a catch-up note after time off.
+A morning and an evening routine for an Obsidian vault, driven by Claude Code, plus four
+skills on request: one goes through the Review with you, one recaps a single meeting, one
+gives a task a note to write in, one builds a catch-up note after time off.
 
 ```
 /daily-note:start-my-day
@@ -11,10 +11,11 @@ builds a catch-up note after time off.
 ```
 
 The two routines run only when you type them. Claude never starts them on its own,
-because they write to a vault that has no undo. `meeting-recap`, `task-note` and
-`im-back` are the exceptions: say "fetch resume of this meet", "make a note for this
-task" or "I'm back" and they run, since asking is the whole point. `im-back` still asks
-once before it creates its note.
+because they write to a vault that has no undo. `review`, `meeting-recap`, `task-note`
+and `im-back` are the exceptions: say "do the review", "fetch resume of this meet", "make
+a note for this task" or "I'm back" and they run, since asking is the whole point.
+`review` acts only on your answers, and `im-back` still asks once before it creates its
+note.
 
 ## What lands in the note
 
@@ -82,8 +83,9 @@ once before it creates its note.
     last 14 days) and your general list, whoever decided
   - **any other channel or group DM,** only in a thread you wrote in today, or reacted to
     with 👍 ✅ ✔️ 👌 💯
-  - An unsure thread is a **Decision?** in the Review instead. A decision with a Jira key
-    gets a **Jira?** line, and the CLAUDE.md check sees the decisions. 1:1 DMs are left out.
+  - Each decision is also a Review item: add it to the project `CLAUDE.md`, or comment it
+    on its Jira issue. An unsure thread is a **Decision?** in the Review instead of a line in
+    the note. 1:1 DMs are left out.
 - **Project tags:** a `#PT-xxxx` tag on each section clearly about one project that has
   none, and on each meeting the Meeting map names a project. An unsure case is flagged
   instead. A mixed meeting is never tagged.
@@ -262,7 +264,7 @@ it is. Before every write, the note is copied to `.daily-note/backups/`.
    to one with the time, like ISO 8601. Obsidian can keep showing the date only. With a
    date-only format, the time comes from the file itself, and is missing when the file
    does not agree on the day.
-7. For task-note:
+8. For task-note:
    - Turn on the Obsidian CLI, and keep Obsidian open: it creates the notes.
    - Point Settings, Templates, Template folder location to your templates folder, or the
      CLI finds no template.
@@ -311,11 +313,11 @@ prompt file in `steps/`, readable on its own, and a step can serve more than one
 | `notes` (runs `daynote.py notes`) | end | `Created` and `Updated` properties, the notes themselves | `notes.json`, `note-recaps.json` |
 | `tags` | end | the note, project folders, vault `CLAUDE.md` | `tags.json`, `review-tags.json` |
 | `review-loose-ends` | end | the note, recaps | `review-loose-ends.json` |
-| `review-claude-md` (last) | end | the whole day: the note, recaps, decisions, notes, asks, End of day, `CLAUDE.md` files | `review-claude-md.json` |
-| review (`daynote.py review-list`, `review-apply`) | end, review | the day's Review items, your answers | `review-answers.json`, the note |
 | `correct` | end | `prose.json`, `text-corrector` | `corrections.json` |
 | `wrapup` | end | the note, tasks closed today, recaps | `wrapup.md` |
-| end (`daynote.py write`, `close`, `recap`) | start, end, recap | the run folder | the note |
+| `review-claude-md` (last) | end | the whole day: the note, recaps, decisions, notes, asks, End of day, `CLAUDE.md` files | `review-claude-md.json` |
+| end (`daynote.py write`, `close`, `recap`, `back`) | start, end, recap, im-back | the run folder | the note |
+| review (`daynote.py review-list`, `review-apply`) | end, review | the day's Review items, your answers | `review-answers.json`, the note |
 
 Claude gathers, the script writes. `scripts/daynote.py` is the only code that changes the
 daily note, and `scripts/tasknote.py` the only code that changes a task line or creates a
@@ -337,6 +339,7 @@ the task notes.
 | `jira.site`, `jira.jql` | the Jira site and the query for your open issues |
 | `summary.language`, `summary.style` | how the morning bullets are written |
 | `recap.language`, `recap.style` | how a meeting recap is written |
+| `notes.language`, `notes.style` | how a note of the day's recap is written |
 | `wrapup.language`, `wrapup.style` | how the End of day bullets are written |
 | `task_note.rules` | how a task gets its note, read by `tasknote.py` itself |
 
@@ -376,8 +379,11 @@ A new alert type, for example "my Jira tickets that became Blocked":
 3. If it needs settings, add a key to `config.json`.
 4. Bump the version.
 
-`write` picks up every `alert-*.md` file, and `close` every `review-*.md` file, so a new
-Alert or Review item needs no change to the template or the script.
+`write` picks up every `alert-*.md` file, and `close` every `review-*.json` file (data
+items the review skill can act on) and `review-*.md` file (plain bullets, which the Review
+can only erase or keep), so a new Alert or Review item needs no change to the template or
+the script. A new kind of Review answer, like a new action on the note, does need
+`review-apply` and a test.
 
 A new Summary source is one bullet in `steps/summary.md`. Python changes only for a new
 kind of edit to the note, and each one comes with a test.
