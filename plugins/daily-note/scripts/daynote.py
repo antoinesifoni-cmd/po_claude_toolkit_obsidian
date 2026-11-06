@@ -31,7 +31,8 @@ code that can damage a note small, in one place, and covered by tests is the saf
 Claude never edits the note directly.
 
 What write() owns in the note:
-  - the block between the BEGIN and END markers (Summary and Alert), rebuilt on every run
+  - the block between the BEGIN and END markers (Summary, Alert, Waiting on me), rebuilt
+    on every run. close() refreshes its Waiting on me list in place
   - meeting headings, added right after the block, and only while the note has no H1 of
     the user's own below it. Once he has written a heading, the skill stops adding any,
     which also means a re-run never duplicates them.
@@ -341,9 +342,131 @@ def read_list(path: Path, key: str):
     return [item for item in items if isinstance(item, dict)]
 
 
+# ---------------------------------------------------------------- waiting on me
+
+WAITING_HEADING = "## Waiting on me"
+WAITING_MAX_DAYS = 5             # older than this, an item drops off
+WAITING_SHARE_DAYS = 1           # a "shared with you" shows on the day it came, and the next
+WAITING_CAP = 10                 # lines in the note, the rest is counted
+WAITING_CLEARED = "waiting-cleared.json"   # in STATE_DIR: ids never to show again
+NO_WAITING = "- Nothing waits on you."
+# The only links "Waiting on me" writes, each checked whole: never a link from outside text.
+WAITING_LINKS = (
+    ("Slack", re.compile(r"^https://[a-z0-9-]+\.slack\.com/archives/[A-Z0-9]+/p\d{16}"
+                         r"(?:\?thread_ts=\d+\.\d+&cid=[A-Z0-9]+)?$")),
+    ("Jira", re.compile(r"^https://[a-z0-9-]+\.atlassian\.net/browse/[A-Z][A-Z0-9]+-\d+$")),
+    ("Confluence", re.compile(r"^https://[a-z0-9-]+\.atlassian\.net/wiki/spaces/[A-Za-z0-9~_-]+"
+                              r"/pages/\d+(?:/[A-Za-z0-9+%._~-]*)?(?:\?focusedCommentId=\d+)?$")),
+    ("Doc", re.compile(r"^https://docs\.google\.com/(?:document|spreadsheets|presentation)/d/"
+                       r"[A-Za-z0-9_-]{25,64}(?:/edit)?$")),
+    ("Email", re.compile(r"^https://mail\.google\.com/mail/\?authuser=[A-Za-z0-9._%+-]+@"
+                         r"[A-Za-z0-9.-]+#all/thread-f:\d+$")),
+)
+
+
+def waiting_link(url) -> str:
+    url = str(url or "").strip()
+    for label, pattern in WAITING_LINKS:
+        if pattern.match(url):
+            return f"[{label}]({url})"
+    return ""
+
+
+def inline(text, limit: int) -> str:
+    """Outside text as a short plain phrase: no tag, link, heading or list marker."""
+    text = clean(str(text or ""))
+    for token in ("[[", "]]", "#", "|", "\r", "\n", "*", "_"):
+        text = text.replace(token, " ")
+    text = LEAD.sub("", re.sub(r"\s{2,}", " ", text).strip()).strip()
+    return text if len(text) <= limit else text[:limit - 1].rstrip() + "…"
+
+
+def read_cleared(root: Path) -> set:
+    try:
+        data = json.loads(read_text(root / STATE_DIR / WAITING_CLEARED))
+    except (OSError, ValueError):
+        return set()
+    items = data.get("cleared") if isinstance(data, dict) else None
+    return {str(i.get("id")) for i in items or [] if isinstance(i, dict) and i.get("id")}
+
+
+def item_age(when, today: date):
+    try:
+        return (today - date.fromisoformat(str(when or "")[:10])).days
+    except ValueError:
+        return None
+
+
+def read_waiting(root: Path, run: Path, today: date):
+    """The open items of waiting.json, oldest first, as (age in days, item). None when the
+    step left no usable file. Drops what is too old, in the future, a share past its day,
+    or cleared in an earlier Review."""
+    items = read_list(run / "waiting.json", "items")
+    if items is None:
+        return None
+    cleared, out = read_cleared(root), []
+    for it in items:
+        age = item_age(it.get("when"), today)
+        if age is None or age < 0 or age > WAITING_MAX_DAYS:
+            continue
+        if it.get("kind") == "share" and age > WAITING_SHARE_DAYS:
+            continue
+        if str(it.get("id") or "") in cleared:
+            continue
+        out.append((age, it))
+    out.sort(key=lambda x: -x[0])
+    return out
+
+
+def waiting_line(age: int, it: dict) -> str:
+    """- **Slack** pt1760-patient-clinical-alerts · Mila: 8 P1 rules missing, OK? #PT-1760 · 1d · [Slack](...)"""
+    head = f"**{inline(it.get('source'), 20) or 'Other'}**"
+    where = inline(it.get("where"), 50)
+    who, what = inline(it.get("who"), 30), inline(it.get("what"), 120)
+    body = f"{who}: {what}" if who and what else who or what
+    parts = [" ".join(p for p in (head, where) if p)]
+    if body:
+        parts[0] += (" · " if where else " ") + body
+    pt = str(it.get("pt") or "")
+    if PROJECT_ID.match(pt):
+        parts[0] += f" #{pt}"
+    parts.append("today" if age == 0 else f"{age}d")
+    links = [waiting_link(u) for u in (it.get("links") or [])[:3]]
+    if any(links):
+        parts.append(" ".join(l for l in links if l))
+    return "- " + " · ".join(parts)
+
+
+def waiting_lines(items) -> list:
+    if items is None:
+        return [NO_ALERTS]
+    if not items:
+        return [NO_WAITING]
+    out = [waiting_line(age, it) for age, it in items[:WAITING_CAP]]
+    if len(items) > WAITING_CAP:
+        out.append(f"- +{len(items) - WAITING_CAP} more, newer ones. The run report lists them.")
+    return out
+
+
+def put_waiting(lines: list, items, note_name: str):
+    """Refresh the Waiting on me list inside the start-my-day block, in place. Added
+    before the block's end marker when the block has no such list yet."""
+    if items is None:
+        return lines, "not checked"
+    at = find_block(lines, BEGIN, END, note_name, "start-my-day")
+    if not at:
+        return lines, "no start-my-day block"
+    new = waiting_lines(items)
+    head = next((i for i in range(at[0], at[1]) if lines[i].strip() == WAITING_HEADING), None)
+    if head is None:
+        return lines[:at[1]] + [WAITING_HEADING, "", *new, ""] + lines[at[1]:], f"added {len(items)}"
+    stop = next((i for i in range(head + 1, at[1]) if lines[i].lstrip().startswith("#")), at[1])
+    return lines[:head + 1] + ["", *new, ""] + lines[stop:], f"refreshed {len(items)}"
+
+
 # ---------------------------------------------------------------- building the note
 
-def build_block(run: Path) -> list:
+def build_block(run: Path, waiting=None) -> list:
     summary = []
     if (run / "summary.md").exists():
         summary = summary_lines(read_text(run / "summary.md"))
@@ -351,7 +474,8 @@ def build_block(run: Path) -> list:
     for f in sorted(run.glob("alert-*.md")):
         alerts += alert_lines(read_text(f))
     return [BEGIN, "", "# Summary", "", *(summary or [NO_SUMMARY]), "",
-            "## Alert", "", *(alerts or [NO_ALERTS]), "", END]
+            "## Alert", "", *(alerts or [NO_ALERTS]), "",
+            WAITING_HEADING, "", *waiting_lines(waiting), "", END]
 
 
 def frontmatter_end(lines: list) -> int:
@@ -422,10 +546,12 @@ def write(root: Path, now: datetime = None) -> dict:
     """Apply the run folder to today's note. Never opens anything, so tests can call it."""
     d = open_day(root, now)
     run = root / STATE_DIR / "run"
-    lines, block_state = put_block(d["lines"], build_block(run), d["rel"])
+    waiting = read_waiting(root, run, d["day"])
+    lines, block_state = put_block(d["lines"], build_block(run, waiting), d["rel"])
     lines, headings = add_headings(lines, read_meetings(run), d["tail_titles"])
     result = {"note": d["rel"], "created": not d["exists"], "block": block_state,
-              "headings": headings, "backup": None}
+              "headings": headings, "waiting": "not checked" if waiting is None else len(waiting),
+              "backup": None}
     written, result["backup"] = save(root, d, lines)
     if not written:
         result["block"] = "unchanged"
@@ -861,7 +987,7 @@ def add_recaps(lines: list, recaps, reserved: set, note_name: str, tail_titles: 
     return lines, ", ".join(out)
 
 
-def build_eod_block(run: Path) -> list:
+def build_eod_block(run: Path, waiting=None) -> list:
     wrapup = []
     if (run / "wrapup.md").exists():
         wrapup = summary_lines(read_text(run / "wrapup.md"))
@@ -870,6 +996,11 @@ def build_eod_block(run: Path) -> list:
     review = []
     for f in files:
         review += alert_lines(read_text(f))
+    if waiting:
+        old = sum(age >= 2 for age, _ in waiting)
+        review.append(f"- **Waiting on me** {len(waiting)} still open"
+                      + (f", {old} for 2 days or more" if old else "")
+                      + ". The list is at the top of the note.")
     if not review:
         review = [NOTHING_TO_FLAG if files else NO_REVIEW]
     return [EOD_BEGIN, "", "# End of day", "", *(wrapup or [NO_WRAPUP]), "",
@@ -919,11 +1050,13 @@ def close(root: Path, now: datetime = None) -> dict:
     lines, recaps = add_recaps(lines, read_list(run / "recaps.json", "recaps"), reserved, rel, tail_titles)
     lines, notes = add_notes(root, lines, read_list(run / "notes.json", "notes"),
                              read_list(run / "note-recaps.json", "notes"), rel, tail_titles)
-    lines, block_state = put_eod_block(lines, build_eod_block(run), rel, tail_titles)
+    waiting = read_waiting(root, run, d["day"])
+    lines, waiting_state = put_waiting(lines, waiting, rel)
+    lines, block_state = put_eod_block(lines, build_eod_block(run, waiting), rel, tail_titles)
 
     result = {"note": rel, "created": not d["exists"], "corrections": fixes,
               "meetings": added, "tags": tags, "recaps": recaps, "notes": notes,
-              "block": block_state,
+              "waiting": waiting_state, "block": block_state,
               "backup": None}
     written, result["backup"] = save(root, d, lines)
     if not written:
