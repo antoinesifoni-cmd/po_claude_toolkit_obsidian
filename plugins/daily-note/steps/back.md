@@ -39,6 +39,7 @@ Run the status command the `alert-confluence` step names, from the vault root, a
   - `remote moved to vN`: `moved v<local> to v<N>, pull it with confluence-pull`
   - `CONFLICT`: `local edits and the page moved, run confluence-status`
   - `RENAMED?`, `FOLDER RENAMED?`, `MISSING`, `FOLDER MISSING`, `AMBIGUOUS`: `link lost, say "fix my Confluence links"`
+  - `NEW:` and `NEW FOLDER:`: `new "<title>" by <who>, say "add it to my vault"`, with no `path` since it is not in the vault yet. Its project: the `PT-xxxx` that starts the folder it is in. These cover the last 14 days only.
 - its project: the `PT-xxxx` that starts the path's project folder, else `other`
 
 These lines are about today, not the range: a page that moved while he was away is still "moved" now.

@@ -4,7 +4,9 @@ Neither writes to Confluence. status reads page versions to compare them; rebase
 touches mapping.json only and never contacts the site at all.
 
 status also reports linked notes and folders that were renamed, moved or deleted in the
-vault (see reconcile.py). It only reports them: relink/unlink in link.py act on them.
+vault (see reconcile.py), and, for the whole vault only, the pages and folders created
+lately under what the vault links (see newpages.py). It only reports them: relink/unlink,
+add/ignore in link.py act on them.
 """
 
 from pathlib import Path
@@ -13,6 +15,7 @@ from .. import drafts
 from ..config import (FOLDERS_FILE, MAPPING_FILE, VAULT, api, get_config, load_json, rel,
                       save_json)
 from ..hashing import HASH_ALGO, is_legacy, local_body_hash
+from ..newpages import find_new, report_new
 from ..reconcile import find_issues, report_lines
 from ..rest import get_draft, get_page_body, get_page_meta
 
@@ -77,6 +80,14 @@ def cmd_status(args):
         print("\nSome entries still use the pre-0.4.0 whole-file hash, which counted"
               "\nfrontmatter reformatting as a local change. Review any 'push needed'"
               "\nabove, then run 'conf.py rebaseline' to switch them to body-only.")
+
+    # New on Confluence under what the vault links: one search, whole-vault runs only.
+    if not args.file:
+        try:
+            for line in report_new(find_new(cfg, s, mapping, load_json(FOLDERS_FILE, {}))):
+                print(line)
+        except Exception as e:  # the sync report above stands even if this fails
+            print(f"NEW: check failed ({e})")
 
 
 def draft_state(cfg, s, entry, remote_v, remote_changed):

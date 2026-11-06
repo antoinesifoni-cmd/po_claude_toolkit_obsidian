@@ -25,8 +25,9 @@ once before it creates its note.
   project's `CLAUDE.md`.
 - **Alert:** two reminders from the script itself: the last note was never closed
   (**Not closed**, with the command to close it), and your last note is 3 workdays old or
-  more (**Back from time off?**, say "I'm back"). Then the linked Confluence pages that
-  someone changed on Confluence, and the
+  more (**Back from time off?**, say "I'm back"). Then the pages new on Confluence under
+  your linked folders (**New on Confluence**, say "add it to my vault"), the linked
+  Confluence pages that someone changed on Confluence, and the
   links that lost their note after a rename, move or delete in the vault (**Link lost**),
   from `confluence-sync`.
 - **Waiting on me:** what people asked you in the last 5 days and you have not answered,

@@ -10,8 +10,10 @@ description: >
   reports that a note is "not linked". It also covers looking up a page or folder id by
   title, and repairing links after a note or folder was renamed, moved or deleted in the
   vault: "fix my Confluence links", "I renamed this note", "répare mes liens Confluence",
-  or status lines starting RENAMED?, MISSING, AMBIGUOUS or FOLDER. For syncing content on
-  already-linked notes, use confluence-pull or confluence-push instead.
+  or status lines starting RENAMED?, MISSING, AMBIGUOUS or FOLDER. Also brings pages that
+  are new on Confluence under linked folders into the vault, or ignores them: "add it to my
+  vault", "add the new pages", "ignore that page", or status lines starting NEW. For
+  syncing content on already-linked notes, use confluence-pull or confluence-push instead.
 ---
 
 # Linking a note to Confluence
@@ -137,6 +139,28 @@ What these commands do, so you can say it plainly:
 
 "Keep for now" changes nothing. The line comes back on the next status, and the morning
 daily note keeps flagging it as **Link lost**.
+
+## New pages on Confluence
+
+A whole-vault status lists, as `NEW:` and `NEW FOLDER:` lines, what was created lately
+under the linked folders and pages and is not in the vault. Take them one at a time, and
+ask before each one:
+
+| Ask | On yes |
+|---|---|
+| "`<title>` by `<who>` is new in `<folder>`. Add it to the vault?" Offer **Add**, **Ignore** and **Later** | `conf.py add <id>` |
+| For a folder: "Folder `<title>` is new in `<folder>`, with K pages. Add it with its pages?" | `conf.py add <id>` (one command brings them all) |
+| **Ignore** | `conf.py ignore <id>` |
+
+- `add` makes the note in the folder the line names, named after the page title, links it
+  and pulls it. Folders on the way that the vault does not have yet are made and linked
+  too. It never writes over a note: if one has that name, it stops and says how to link it
+  by hand. It backs up `mapping.json` and `folders.json` first.
+- `ignore` remembers the id in `.confsync/ignored.json`, with everything under it for a
+  folder. To undo, remove it from that file.
+- **Later** changes nothing: the line comes back on the next status while the page is less
+  than 14 days old.
+- Nothing is sent to Confluence either way.
 
 ## After linking
 
